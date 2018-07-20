@@ -3,12 +3,14 @@ import { Worqr } from '../index';
 
 require('dotenv').config();
 
-const worqr = new Worqr({host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), options: {password: process.env.REDIS_PASSWORD}}, {redisKeyPrefix: 'worq1'});
+const worqr = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), options: { password: process.env.REDIS_PASSWORD } }, { redisKeyPrefix: 'worq1' });
 
-const MY_WORK = 'work';
-
-worqr.createQueue(MY_WORK).then((created) => {
-    worqr.startWork(MY_WORK).then((working) => {
-
+worqr.enqueue('myQueue', 'myTask').then(() => {
+    worqr.startTask('myQueue', 'myWorker').then(processName => {
+        console.log(processName);
     });
+});
+
+worqr.startWork('myWorker', 'myQueue').then(() => {
+
 });
