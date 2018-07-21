@@ -50,6 +50,19 @@ finishTask (P1)
  2) SREM W1_Q1 P1
 
 
+cancelTasks (Q1, T1)  (workers listen on Q1* and "finish" all tasks that are canceled)
+        Q1 : List
+        +----------------------+
+        | +----+ +----+        |
+        | |   X| |    |        |
+        | |T1  | |T0  |        |
+        | +----+ +----+        |
+        +----------------------+
+         head              tail
+ 1) LREM Q1 T1 0
+ 2) PUBLISH Q1_cancel T1
+
+
 startWorker (W1)
         Workers : Set
         +----------------------+          2) W1 = "RUN"
