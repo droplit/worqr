@@ -42,3 +42,29 @@ T1 +--> | |T1  | |T0  |        |
          head              tail                                head             tail
 
 ```
+
+# Develpment
+## Setup
+Install dependencies
+```
+npm i
+```
+
+Create `.env` file and input environment variables. See `.example.env for reference`
+
+## Build
+Build and transpile TS
+```
+npm run build
+```
+
+## Lint code
+```
+npm run tslint
+```
+
+
+## Run with watch
+```
+npm run start
+```

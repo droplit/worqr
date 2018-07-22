@@ -1,7 +1,5 @@
 import { Worqr } from '../index';
 
-require('dotenv').config();
-
 const worqr = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), options: { password: process.env.REDIS_PASSWORD } }, { redisKeyPrefix: 'worq1' });
 
 Promise.resolve()
