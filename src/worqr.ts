@@ -1,7 +1,6 @@
 import { EventEmitter } from 'events';
 import * as redis from 'redis';
 import * as uuid from 'uuid';
-import { resolve } from 'path';
 
 const log = require('debug')('worqr');
 
@@ -9,7 +8,7 @@ export class Worqr extends EventEmitter {
     private publisher: redis.RedisClient;
     private subscriber: redis.RedisClient;
     private redisKeyPrefix = 'worqr';
-    private workerId = uuid.v4();
+    private instanceId = uuid.v4();
     private workerHeartbeatInterval = 1;
     private workerTimeout = 3;
     private digestBiteSize = 0;
@@ -20,21 +19,21 @@ export class Worqr extends EventEmitter {
     private workingQueues: string;
     private workingProcesses: string;
 
-    public constructor(redisOptions: { host: string, port: number, options?: redis.ClientOpts }, worqrOptions?: { redisKeyPrefix?: string, workerId?: string, workerHeartbeatInterval?: number, workerTimeout?: number, digestBiteSize?: number }) {
+    public constructor(redisOptions: { host: string, port: number, options?: redis.ClientOpts }, worqrOptions?: { redisKeyPrefix?: string, instanceId?: string, workerHeartbeatInterval?: number, workerTimeout?: number, digestBiteSize?: number }) {
         super();
         this.publisher = redis.createClient(redisOptions);
         this.subscriber = redis.createClient(redisOptions);
         this.redisKeyPrefix = (worqrOptions && worqrOptions.redisKeyPrefix) || this.redisKeyPrefix;
-        this.workerId = (worqrOptions && worqrOptions.workerId) || this.workerId;
+        this.instanceId = (worqrOptions && worqrOptions.instanceId) || this.instanceId;
         this.workerHeartbeatInterval = (worqrOptions && worqrOptions.workerHeartbeatInterval) || this.workerHeartbeatInterval;
         this.workerTimeout = (worqrOptions && worqrOptions.workerTimeout) || this.workerTimeout;
         this.digestBiteSize = (worqrOptions && worqrOptions.digestBiteSize) || this.digestBiteSize;
         this.queues = `${this.redisKeyPrefix}:queues`;
         this.processes = `${this.redisKeyPrefix}:processes`;
-        this.workers = `${this.redisKeyPrefix}:workers:${this.workerId}`;
-        this.workerTimers = `${this.redisKeyPrefix}:workerTimers:${this.workerId}`;
-        this.workingQueues = `${this.redisKeyPrefix}:workingQueues:${this.workerId}`;
-        this.workingProcesses = `${this.redisKeyPrefix}:workingProcesses:${this.workerId}`;
+        this.workers = `${this.redisKeyPrefix}:workers:${this.instanceId}`;
+        this.workerTimers = `${this.redisKeyPrefix}:workerTimers:${this.instanceId}`;
+        this.workingQueues = `${this.redisKeyPrefix}:workingQueues:${this.instanceId}`;
+        this.workingProcesses = `${this.redisKeyPrefix}:workingProcesses:${this.instanceId}`;
 
         this.subscriber.on('message', (channel, message) => {
             const queueName = channel.split('_')[0];
