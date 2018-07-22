@@ -15,20 +15,22 @@ Promise.resolve()
 worqr.on(queueName, event => {
     switch (event.type) {
         case 'work':
-            const workerName = workerNames[Math.floor(Math.random() * workerNames.length)];
+            // const workerName = workerNames[Math.floor(Math.random() * workerNames.length)];
 
-            Promise.resolve()
-                .then(() => worqr.startTask(queueName, workerName))
-                .then(([processName, task]) => new Promise((resolve, reject) => {
-                    if (!task) return resolve();
+            workerNames.forEach(workerName => {
+                Promise.resolve()
+                    .then(() => worqr.startTask(queueName, workerName))
+                    .then(([processName, task]) => {
+                        if (!task) return log(`${workerName} did not get any tasks`);
 
-                    log(`${workerName} doing ${task}`);
+                        log(`${workerName} doing ${task}`);
 
-                    setTimeout(() => {
-                        worqr.finishTask(processName).then(() => resolve());
-                    }, Math.random() * 10000);
-                }))
-                .catch(console.error);
+                        setTimeout(() => {
+                            worqr.finishTask(processName as string);
+                        }, Math.random() * 5000);
+                    })
+                    .catch(console.error);
+            });
             break;
         case 'cancel':
             const task = event.message;
@@ -52,15 +54,15 @@ worqr.on(queueName, event => {
         Promise.resolve()
             .then(() => worqr.enqueue(queueName, task))
             .then(() => {
-                if (Math.random() > 0.5) {
-                    setTimeout(() => {
-                        worqr.cancelTasks(queueName, task);
-                    }, 500);
-                }
+                // if (Math.random() > 0.5) {
+                //     setTimeout(() => {
+                //         worqr.cancelTasks(queueName, task);
+                //     }, 500);
+                // }
             })
             .catch(console.error);
         createRandomTask();
-    }, Math.random() * 10000);
+    }, Math.random() * 5000);
 })();
 
 // Promise.resolve()

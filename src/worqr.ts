@@ -58,9 +58,9 @@ export class Worqr extends EventEmitter {
 
     public getQueueNames(): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.publisher.keys(`${this.queues}*`, (err, queues) => {
+            this.publisher.keys(`${this.queues}*`, (err, queueNames) => {
                 if (err) return reject(err);
-                resolve(queues);
+                resolve(queueNames.map(queueName => queueName.split(':')[2]));
             });
         });
     }
@@ -109,13 +109,13 @@ export class Worqr extends EventEmitter {
 
     // #region Tasks
 
-    public startTask(queueName: string, workerName: string): Promise<[string, string]> {
+    public startTask(queueName: string, workerName: string): Promise<[string | null, string | null]> {
         log(`${workerName} starting task on ${queueName}`);
 
         return new Promise((resolve, reject) => {
             Promise.resolve()
                 .then(() => this.isWorking(workerName, queueName))
-                .then(isWorking => {
+                .then(isWorking => new Promise<[string, string]>((resolve, reject) => {
                     if (!isWorking) return reject(`${workerName} is not working on ${queueName}`);
 
                     const processName = `${workerName}_${queueName}_${uuid.v4()}`;
@@ -127,7 +127,18 @@ export class Worqr extends EventEmitter {
                             if (err) return reject(err);
                             resolve([processName, task]);
                         });
-                });
+                }))
+                .then(([processName, task]) => {
+                    if (!task) {
+                        this.publisher.srem(`${this.workingProcesses}:${workerName}_${queueName}`, processName, err => {
+                            if (err) return reject(err);
+                            resolve([null, null]);
+                        });
+                    } else {
+                        resolve([processName, task]);
+                    }
+                })
+                .catch(err => reject(err));
         });
     }
 
@@ -248,6 +259,7 @@ export class Worqr extends EventEmitter {
                     if (err) return reject(err);
 
                     this.subscriber.subscribe(`${queueName}_work`);
+                    this.subscriber.subscribe(`${queueName}_cancel`);
 
                     resolve();
                 });
@@ -301,7 +313,8 @@ export class Worqr extends EventEmitter {
                     multi.exec(err => {
                         if (err) return reject(err);
 
-                        this.subscriber.unsubscribe(queueName);
+                        this.subscriber.unsubscribe(`${queueName}_work`);
+                        this.subscriber.unsubscribe(`${queueName}_cancel`);
 
                         resolve();
                     });
@@ -347,7 +360,8 @@ export class Worqr extends EventEmitter {
                         if (err) return reject(err);
 
                         queueNames.forEach(queueName => {
-                            this.subscriber.unsubscribe(queueName);
+                            this.subscriber.unsubscribe(`${queueName}_work`);
+                            this.subscriber.unsubscribe(`${queueName}_cancel`);
                         });
 
                         resolve();
