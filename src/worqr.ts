@@ -8,7 +8,7 @@ export class Worqr extends EventEmitter {
     private publisher: redis.RedisClient;
     private subscriber: redis.RedisClient;
     private redisKeyPrefix = 'worqr';
-    private instanceId = uuid.v4();
+    private workerId = uuid.v4();
     private workerHeartbeatInterval = 1;
     private workerTimeout = 3;
     private digestBiteSize = 0;
@@ -24,16 +24,16 @@ export class Worqr extends EventEmitter {
         this.publisher = redis.createClient(redisOptions);
         this.subscriber = redis.createClient(redisOptions);
         this.redisKeyPrefix = (worqrOptions && worqrOptions.redisKeyPrefix) || this.redisKeyPrefix;
-        this.instanceId = (worqrOptions && worqrOptions.instanceId) || this.instanceId;
+        this.workerId = (worqrOptions && worqrOptions.instanceId) || this.workerId;
         this.workerHeartbeatInterval = (worqrOptions && worqrOptions.workerHeartbeatInterval) || this.workerHeartbeatInterval;
         this.workerTimeout = (worqrOptions && worqrOptions.workerTimeout) || this.workerTimeout;
         this.digestBiteSize = (worqrOptions && worqrOptions.digestBiteSize) || this.digestBiteSize;
         this.queues = `${this.redisKeyPrefix}:queues`;
         this.processes = `${this.redisKeyPrefix}:processes`;
-        this.workers = `${this.redisKeyPrefix}:workers:${this.instanceId}`;
-        this.workerTimers = `${this.redisKeyPrefix}:workerTimers:${this.instanceId}`;
-        this.workingQueues = `${this.redisKeyPrefix}:workingQueues:${this.instanceId}`;
-        this.workingProcesses = `${this.redisKeyPrefix}:workingProcesses:${this.instanceId}`;
+        this.workers = `${this.redisKeyPrefix}:workers`;
+        this.workerTimers = `${this.redisKeyPrefix}:workerTimers`;
+        this.workingQueues = `${this.redisKeyPrefix}:workingQueues`;
+        this.workingProcesses = `${this.redisKeyPrefix}:workingProcesses`;
 
         this.subscriber.on('message', (channel, message) => {
             const queueName = channel.split('_')[0];
@@ -42,15 +42,9 @@ export class Worqr extends EventEmitter {
             this.emit(queueName, { type, message });
         });
 
-        // digest
+        // digest?
         setInterval(() => {
-            this.publisher.smembers(this.workers, (err, workerNames) => {
-                if (err) return log(err);
-
-                workerNames.forEach(workerName => {
-                    this.keepWorkerAlive(workerName);
-                });
-            });
+            this.keepWorkerAlive();
         }, this.workerHeartbeatInterval);
     }
 
@@ -109,20 +103,20 @@ export class Worqr extends EventEmitter {
 
     // #region Tasks
 
-    public startTask(queueName: string, workerName: string): Promise<[string | null, string | null]> {
-        log(`${workerName} starting task on ${queueName}`);
+    public startTask(queueName: string): Promise<[string | null, string | null]> {
+        log(`${this.workerId} starting task on ${queueName}`);
 
         return new Promise((resolve, reject) => {
             Promise.resolve()
-                .then(() => this.isWorking(workerName, queueName))
+                .then(() => this.isWorking(queueName))
                 .then(isWorking => new Promise<[string, string]>((resolve, reject) => {
-                    if (!isWorking) return reject(`${workerName} is not working on ${queueName}`);
+                    if (!isWorking) return reject(`${this.workerId} is not working on ${queueName}`);
 
-                    const processName = `${workerName}_${queueName}_${uuid.v4()}`;
+                    const processName = `${queueName}_${uuid.v4()}`;
 
                     this.publisher.multi()
                         .rpoplpush(`${this.queues}:${queueName}`, `${this.processes}:${processName}`)
-                        .sadd(`${this.workingProcesses}:${workerName}_${queueName}`, processName)
+                        .sadd(`${this.workingProcesses}:${queueName}`, processName)
                         .exec((err, [task]) => {
                             if (err) return reject(err);
                             resolve([processName, task]);
@@ -130,7 +124,7 @@ export class Worqr extends EventEmitter {
                 }))
                 .then(([processName, task]) => {
                     if (!task) {
-                        this.publisher.srem(`${this.workingProcesses}:${workerName}_${queueName}`, processName, err => {
+                        this.publisher.srem(`${this.workingProcesses}:${queueName}`, processName, err => {
                             if (err) return reject(err);
                             resolve([null, null]);
                         });
@@ -177,12 +171,11 @@ export class Worqr extends EventEmitter {
         log(`stopping process ${processName}`);
 
         return new Promise((resolve, reject) => {
-            const workerName = processName.split('_')[0];
             const queueName = processName.split('_')[1];
 
             this.publisher.multi()
                 .rpoplpush(`${this.processes}:${processName}`, `${this.queues}:${queueName}`)
-                .srem(`${this.workingProcesses}:${workerName}_${queueName}`, processName)
+                .srem(`${this.workingProcesses}:${queueName}`, processName)
                 .exec(err => {
                     if (err) return reject(err);
                     resolve();
@@ -194,12 +187,11 @@ export class Worqr extends EventEmitter {
         log(`finishing process ${processName}`);
 
         return new Promise((resolve, reject) => {
-            const workerName = processName.split('_')[0];
             const queueName = processName.split('_')[1];
 
             this.publisher.multi()
                 .del(`${this.processes}:${processName}`)
-                .srem(`${this.workingProcesses}:${workerName}_${queueName}`, processName)
+                .srem(`${this.workingProcesses}:${queueName}`, processName)
                 .exec(err => {
                     if (err) return reject(err);
                     resolve();
@@ -225,13 +217,13 @@ export class Worqr extends EventEmitter {
 
     // #region Workers
 
-    public startWorker(workerName: string): Promise<void> {
-        log(`starting worker ${workerName}`);
+    public startWorker(): Promise<void> {
+        log(`starting worker ${this.workerId}`);
 
         return new Promise((resolve, reject) => {
             this.publisher.multi()
-                .sadd(this.workers, workerName)
-                .set(`${this.workerTimers}:${workerName}`, 'RUN', 'EX', this.workerTimeout)
+                .sadd(this.workers, this.workerId)
+                .set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout)
                 .exec(err => {
                     if (err) return reject(err);
                     resolve();
@@ -239,22 +231,22 @@ export class Worqr extends EventEmitter {
         });
     }
 
-    public keepWorkerAlive(workerName: string): Promise<void> {
+    public keepWorkerAlive(): Promise<void> {
         return new Promise((resolve, reject) => {
-            this.publisher.set(`${this.workerTimers}:${workerName}`, 'RUN', 'EX', this.workerTimeout, 'XX', (err, success) => {
+            this.publisher.set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout, 'XX', (err, success) => {
                 if (err) return reject(err);
-                if (!success) return this.failWorker(workerName);
+                if (!success) return this.failWorker();
                 resolve();
             });
         });
     }
 
-    public startWork(workerName: string, queueName: string): Promise<void> {
-        log(`${workerName} starting work on ${queueName}`);
+    public startWork(queueName: string): Promise<void> {
+        log(`${this.workerId} starting work on ${queueName}`);
 
         return new Promise((resolve, reject) => {
             this.publisher.multi()
-                .sadd(`${this.workingQueues}:${workerName}`, queueName)
+                .sadd(`${this.workingQueues}:${this.workerId}`, queueName)
                 .exec(err => {
                     if (err) return reject(err);
 
@@ -266,43 +258,43 @@ export class Worqr extends EventEmitter {
         });
     }
 
-    public isWorking(workerName: string, queueName: string): Promise<boolean> {
+    public isWorking(queueName: string): Promise<boolean> {
         return new Promise((resolve, reject) => {
-            this.publisher.sismember(`${this.workingQueues}:${workerName}`, queueName, (err, isMember) => {
+            this.publisher.sismember(`${this.workingQueues}:${this.workerId}`, queueName, (err, isMember) => {
                 if (err) return reject(err);
                 resolve(isMember === 1);
             });
         });
     }
 
-    public getWorkingQueues(workerName: string): Promise<string[]> {
+    public getWorkingQueues(): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.publisher.smembers(`${this.workingQueues}:${workerName}`, (err, queueNames) => {
+            this.publisher.smembers(`${this.workingQueues}:${this.workerId}`, (err, queueNames) => {
                 if (err) return reject(err);
                 resolve(queueNames);
             });
         });
     }
 
-    public getWorkingProcesses(workerName: string, queueName: string): Promise<string[]> {
+    public getWorkingProcesses(queueName: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.publisher.smembers(`${this.workingProcesses}:${workerName}_${queueName}`, (err, processNames) => {
+            this.publisher.smembers(`${this.workingProcesses}:${queueName}`, (err, processNames) => {
                 if (err) return reject(err);
                 resolve(processNames);
             });
         });
     }
 
-    public stopWork(workerName: string, queueName: string): Promise<void> {
-        log(`${workerName} stopping work on ${queueName}`);
+    public stopWork(queueName: string): Promise<void> {
+        log(`${this.workerId} stopping work on ${queueName}`);
 
         return new Promise((resolve, reject) => {
             Promise.resolve()
-                .then(() => this.getWorkingProcesses(workerName, queueName))
+                .then(() => this.getWorkingProcesses(queueName))
                 .then(processNames => {
                     let multi = this.publisher.multi()
-                        .srem(`${this.workingQueues}:${workerName}`, queueName)
-                        .del(`${this.workingProcesses}:${workerName}_${queueName}`);
+                        .srem(`${this.workingQueues}:${this.workerId}`, queueName)
+                        .del(`${this.workingProcesses}:${queueName}`);
 
                     processNames.forEach(processName => {
                         multi = multi
@@ -323,29 +315,29 @@ export class Worqr extends EventEmitter {
         });
     }
 
-    public failWorker(workerName: string): Promise<void> {
-        log(`failing ${workerName}`);
+    public failWorker(): Promise<void> {
+        log(`failing ${this.workerId}`);
 
         return new Promise((resolve, reject) => {
             Promise.resolve()
-                .then(() => this.getWorkingQueues(workerName))
+                .then(() => this.getWorkingQueues())
                 .then(queueNames => new Promise<[string[], string[]]>((resolve, reject) => {
                     const processNames: string[] = [];
 
-                    Promise.all(queueNames.map(queueName => this.getWorkingProcesses(workerName, queueName)))
+                    Promise.all(queueNames.map(queueName => this.getWorkingProcesses(queueName)))
                         .then(processNames2d => processNames2d.forEach(processNames1d => processNames.push(...processNames1d)))
                         .then(() => resolve([queueNames, processNames]))
                         .catch(err => reject(err));
                 }))
                 .then(([queueNames, processNames]) => {
                     let multi = this.publisher.multi()
-                        .srem(this.workers, workerName)
-                        .del(`${this.workerTimers}:${workerName}`)
-                        .del(`${this.workingQueues}:${workerName}`);
+                        .srem(this.workers, this.workerId)
+                        .del(`${this.workerTimers}:${this.workerId}`)
+                        .del(`${this.workingQueues}:${this.workerId}`);
 
                     queueNames.forEach(queueName => {
                         multi = multi
-                            .del(`${this.workingProcesses}:${workerName}_${queueName}`);
+                            .del(`${this.workingProcesses}:${queueName}`);
                     });
 
                     processNames.forEach(processName => {

@@ -5,32 +5,27 @@ const log = require('debug')('worqr:client');
 const worqr = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), options: { password: process.env.REDIS_PASSWORD } });
 
 const queueName = 'myQueue';
-const workerNames = ['myWorker1', 'myWorker2', 'myWorker3', 'myWorker4'];
 
 Promise.resolve()
-    .then(() => Promise.all(workerNames.map(workerName => worqr.startWorker(workerName))))
-    .then(() => Promise.all(workerNames.map(workerName => worqr.startWork(workerName, queueName))))
+    .then(() => worqr.startWorker())
+    .then(() => worqr.startWork(queueName))
     .catch(console.error);
 
 worqr.on(queueName, event => {
     switch (event.type) {
         case 'work':
-            // const workerName = workerNames[Math.floor(Math.random() * workerNames.length)];
+            Promise.resolve()
+                .then(() => worqr.startTask(queueName))
+                .then(([processName, task]) => {
+                    if (!task) return log(`did not get any tasks`);
 
-            workerNames.forEach(workerName => {
-                Promise.resolve()
-                    .then(() => worqr.startTask(queueName, workerName))
-                    .then(([processName, task]) => {
-                        if (!task) return log(`${workerName} did not get any tasks`);
+                    log(`doing ${task}`);
 
-                        log(`${workerName} doing ${task}`);
-
-                        setTimeout(() => {
-                            worqr.finishTask(processName as string);
-                        }, Math.random() * 5000);
-                    })
-                    .catch(console.error);
-            });
+                    setTimeout(() => {
+                        worqr.finishTask(processName as string);
+                    }, Math.random() * 5000);
+                })
+                .catch(console.error);
             break;
         case 'cancel':
             const task = event.message;
@@ -83,54 +78,36 @@ worqr.on(queueName, event => {
 //     // verify queue
 //     .then(() => worqr.getQueueNames())
 //     .then(queues => console.log(`queues: ${queues.toString()}`))
-//     // create workers
-//     .then(() => worqr.startWorker('myWorker1'))
-//     .then(() => worqr.startWorker('myWorker2'))
-//     .then(() => worqr.startWorker('myWorker3'))
+//     // start worker
+//     .then(() => worqr.startWorker())
 //     // fail to start task on unsubscribed queue
-//     .then(() => worqr.startTask('myQueue1', 'myWorker1').catch(console.error))
-//     // start worker 1 on all queues
-//     .then(() => worqr.startWork('myWorker1', 'myQueue1'))
-//     .then(() => worqr.startWork('myWorker1', 'myQueue2'))
-//     .then(() => worqr.startWork('myWorker1', 'myQueue3'))
-//     // start worker 1 tasks
-//     .then(() => worqr.startTask('myQueue1', 'myWorker1'))
-//     .then(() => worqr.startTask('myQueue2', 'myWorker1'))
-//     .then(() => worqr.startTask('myQueue3', 'myWorker1'))
+//     .then(() => worqr.startTask('myQueue1').catch(console.error))
+//     // start all queues
+//     .then(() => worqr.startWork('myQueue1'))
+//     .then(() => worqr.startWork('myQueue2'))
+//     .then(() => worqr.startWork('myQueue3'))
+//     // start tasks
+//     .then(() => worqr.startTask('myWorker1'))
 //     // test stopping and starting a task
-//     .then(processName => worqr.stopTask(processName))
-//     .then(() => worqr.startTask('myQueue3', 'myWorker1'))
-//     // stop worker 1 on queue 2 and 3
-//     .then(() => worqr.stopWork('myWorker1', 'myQueue2'))
-//     .then(() => worqr.stopWork('myWorker1', 'myQueue3'))
-//     // start worker 2 on queue 2
-//     .then(() => worqr.startWork('myWorker2', 'myQueue2'))
-//     // start worker 3 on queue 3
-//     .then(() => worqr.startWork('myWorker3', 'myQueue3'))
-//     // start worker 2 and 3 tasks
-//     .then(() => worqr.startTask('myQueue2', 'myWorker2'))
-//     .then(() => worqr.startTask('myQueue3', 'myWorker3'))
-//     // stop worker 2
-//     .then(() => worqr.stopWork('myWorker2', 'myQueue2'))
-//     // fail worker 3
-//     .then(() => worqr.failWorker('myWorker3'))
-//     // start worker 2 on queue 3
-//     .then(() => worqr.startWork('myWorker2', 'myQueue3'))
+//     .then(([processName, task]) => worqr.stopTask(processName as string))
+//     .then(() => worqr.startTask('myQueue3'))
+//     // stop work on queue 2
+//     .then(() => worqr.stopWork('myQueue2'))
 //     // test finishing a task
-//     .then(() => worqr.startTask('myQueue3', 'myWorker2'))
-//     .then(processName => worqr.finishTask(processName))
+//     .then(() => worqr.startTask('myQueue3'))
+//     .then(([processName, task]) => worqr.finishTask(processName as string))
 //     // start and finish another task
-//     .then(() => worqr.startTask('myQueue3', 'myWorker2'))
-//     .then(processName => worqr.finishTask(processName))
+//     .then(() => worqr.startTask('myQueue3'))
+//     .then(([processName, task]) => worqr.finishTask(processName as string))
 //     // verify the queue exists
 //     .then(() => worqr.isQueue('myQueue3'))
 //     .then(exists => console.log(`myQueue3 exists: ${exists}`))
 //     // start and finish the last task
-//     .then(() => worqr.startTask('myQueue3', 'myWorker2'))
-//     .then(processName => worqr.finishTask(processName))
+//     .then(() => worqr.startTask('myQueue3'))
+//     .then(([processName, task]) => worqr.finishTask(processName as string))
 //     // verify the queue does not exist
 //     .then(() => worqr.isQueue('myQueue3'))
 //     .then(exists => console.log(`myQueue3 exists: ${exists}`))
 //     // stop working on the empty queue 3
-//     .then(() => worqr.stopWork('myWorker2', 'myQueue3'))
+//     .then(() => worqr.stopWork('myQueue3'))
 //     .catch(console.error);
