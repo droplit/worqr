@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import * as redis from 'redis';
 import * as uuid from 'uuid';
+import { resolve } from 'path';
 
 const log = require('debug')('worqr');
 
@@ -131,8 +132,41 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    public getProcesses(): Promise<string[]> {
+        return new Promise((resolve, reject) => {
+            this.publisher.keys(`${this.processes}*`, (err, processNames) => {
+                if (err) return reject(err);
+                resolve(processNames.map(processName => processName.split(':')[2]));
+            });
+        });
+    }
+
+    public getProcessesForTask(task: string): Promise<string[]> {
+        return new Promise((resolve, reject) => {
+            const processNamesForTask: string[] = [];
+
+            Promise.resolve()
+                .then(() => this.getProcesses())
+                .then(processNames => Promise.all(processNames.map(processName => new Promise((resolve, reject) => {
+                    console.log(processName);
+                    this.publisher.lindex(`${this.processes}:${processName}`, 0, (err, t) => {
+                        console.log(t);
+                        if (err) return reject(err);
+
+                        if (t === task) {
+                            processNamesForTask.push(processName);
+                        }
+
+                        resolve();
+                    });
+                }))))
+                .then(() => resolve(processNamesForTask))
+                .catch(err => reject(err));
+        });
+    }
+
     public stopTask(processName: string): Promise<void> {
-        log(`stopping task ${processName}`);
+        log(`stopping process ${processName}`);
 
         return new Promise((resolve, reject) => {
             const workerName = processName.split('_')[0];
@@ -149,7 +183,7 @@ export class Worqr extends EventEmitter {
     }
 
     public finishTask(processName: string): Promise<void> {
-        log(`finishing task ${processName}`);
+        log(`finishing process ${processName}`);
 
         return new Promise((resolve, reject) => {
             const workerName = processName.split('_')[0];

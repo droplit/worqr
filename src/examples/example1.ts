@@ -31,14 +31,34 @@ worqr.on(queueName, event => {
                 .catch(console.error);
             break;
         case 'cancel':
-            worqr.cancelTasks(queueName, event.message);
+            const task = event.message;
+
+            Promise.resolve()
+                .then(() => worqr.getProcessesForTask(task))
+                .then(processNames => Promise.all(processNames.map(processName => {
+                    log(`finishing ${processName}`);
+
+                    return worqr.stopTask(processName);
+                })))
+                .catch(console.error);
             break;
     }
 });
 
 (function createRandomTask() {
     setTimeout(() => {
-        worqr.enqueue(queueName, `task #${Math.round(Math.random() * 100)}`);
+        const task = `task #${Math.round(Math.random() * 100)}`;
+
+        Promise.resolve()
+            .then(() => worqr.enqueue(queueName, task))
+            .then(() => {
+                if (Math.random() > 0.5) {
+                    setTimeout(() => {
+                        worqr.cancelTasks(queueName, task);
+                    }, 500);
+                }
+            })
+            .catch(console.error);
         createRandomTask();
     }, Math.random() * 10000);
 })();
