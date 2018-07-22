@@ -1,0 +1,11 @@
+# git #
+.git*
+
+# Typescript #
+tsconfig.json
+tslint.json
+src/
+
+*.env
+
+notes.md
