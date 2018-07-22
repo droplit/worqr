@@ -171,7 +171,7 @@ export class Worqr extends EventEmitter {
         log(`stopping process ${processName}`);
 
         return new Promise((resolve, reject) => {
-            const queueName = processName.split('_')[1];
+            const queueName = processName.split('_')[0];
 
             this.publisher.multi()
                 .rpoplpush(`${this.processes}:${processName}`, `${this.queues}:${queueName}`)
@@ -187,7 +187,7 @@ export class Worqr extends EventEmitter {
         log(`finishing process ${processName}`);
 
         return new Promise((resolve, reject) => {
-            const queueName = processName.split('_')[1];
+            const queueName = processName.split('_')[0];
 
             this.publisher.multi()
                 .del(`${this.processes}:${processName}`)
@@ -341,7 +341,7 @@ export class Worqr extends EventEmitter {
                     });
 
                     processNames.forEach(processName => {
-                        const queueName = processName.split('_')[1];
+                        const queueName = processName.split('_')[0];
 
                         multi = multi
                             .rpoplpush(`${this.processes}:${processName}`, `${this.queues}:${queueName}`)

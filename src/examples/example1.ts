@@ -87,7 +87,7 @@ worqr.on(queueName, event => {
 //     .then(() => worqr.startWork('myQueue2'))
 //     .then(() => worqr.startWork('myQueue3'))
 //     // start tasks
-//     .then(() => worqr.startTask('myWorker1'))
+//     .then(() => worqr.startTask('myQueue1'))
 //     // test stopping and starting a task
 //     .then(([processName, task]) => worqr.stopTask(processName as string))
 //     .then(() => worqr.startTask('myQueue3'))
