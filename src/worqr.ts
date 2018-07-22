@@ -148,9 +148,7 @@ export class Worqr extends EventEmitter {
             Promise.resolve()
                 .then(() => this.getProcesses())
                 .then(processNames => Promise.all(processNames.map(processName => new Promise((resolve, reject) => {
-                    console.log(processName);
                     this.publisher.lindex(`${this.processes}:${processName}`, 0, (err, t) => {
-                        console.log(t);
                         if (err) return reject(err);
 
                         if (t === task) {
