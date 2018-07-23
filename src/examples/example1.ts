@@ -3,15 +3,26 @@ import { Worqr } from '../index';
 const log = require('debug')('worqr:client');
 
 const worqr = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), options: { password: process.env.REDIS_PASSWORD } });
+const worqr1 = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), options: { password: process.env.REDIS_PASSWORD } });
+const worqr2 = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), options: { password: process.env.REDIS_PASSWORD } });
+const worqr3 = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), options: { password: process.env.REDIS_PASSWORD } });
 
 const queueName = 'myQueue';
 
 Promise.resolve()
-    .then(() => worqr.startWorker())
-    .then(() => worqr.startWork(queueName))
+    .then(() => worqr1.startWorker())
+    .then(() => worqr2.startWorker())
+    .then(() => worqr3.startWorker())
+    .then(() => worqr1.startWork(queueName))
+    .then(() => worqr2.startWork(queueName))
+    .then(() => worqr3.startWork(queueName))
     .catch(console.error);
 
-worqr.on(queueName, event => {
+worqr1.on(queueName, (event: any) => handleEvent(worqr1, event));
+worqr2.on(queueName, (event: any) => handleEvent(worqr2, event));
+worqr3.on(queueName, (event: any) => handleEvent(worqr3, event));
+
+function handleEvent(worqr: Worqr, event: { type: string, message: string }) {
     switch (event.type) {
         case 'work':
             Promise.resolve()
@@ -40,14 +51,18 @@ worqr.on(queueName, event => {
                 .catch(console.error);
             break;
     }
-});
+}
 
 (function createRandomTask() {
     setTimeout(() => {
-        const task = `task #${Math.round(Math.random() * 100)}`;
+        const task1 = `task #${Math.round(Math.random() * 100)}`;
+        const task2 = `task #${Math.round(Math.random() * 100)}`;
+        const task3 = `task #${Math.round(Math.random() * 100)}`;
 
         Promise.resolve()
-            .then(() => worqr.enqueue(queueName, task))
+            .then(() => worqr.enqueue(queueName, task1))
+            .then(() => worqr.enqueue(queueName, task2))
+            .then(() => worqr.enqueue(queueName, task3))
             .catch(console.error);
         createRandomTask();
     }, Math.random() * 5000);
