@@ -9,9 +9,10 @@ export class Worqr extends EventEmitter {
     private subscriber: redis.RedisClient;
     private redisKeyPrefix = 'worqr';
     private workerId = uuid.v4();
-    private workerHeartbeatInterval = 1;
+    private workerHeartbeatInterval = 1000;
     private workerTimeout = 3;
     private digestBiteSize = 0;
+    private digestInterval: NodeJS.Timer | null = null;
     private queues: string;
     private processes: string;
     private workers: string;
@@ -43,11 +44,6 @@ export class Worqr extends EventEmitter {
 
             this.emit(queueName, { type, message });
         });
-
-        // digest?
-        setInterval(() => {
-            this.keepWorkerAlive();
-        }, this.workerHeartbeatInterval);
     }
 
     // #region Queues
@@ -231,6 +227,11 @@ export class Worqr extends EventEmitter {
                 .set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout)
                 .exec(err => {
                     if (err) return reject(err);
+
+                    this.digestInterval = setInterval(() => {
+                        this.keepWorkerAlive();
+                    }, this.workerHeartbeatInterval);
+
                     resolve();
                 });
         });
@@ -360,6 +361,8 @@ export class Worqr extends EventEmitter {
                             this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
                             this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
                         });
+
+                        clearInterval(this.digestInterval as NodeJS.Timer);
 
                         resolve();
                     });

@@ -75,7 +75,7 @@ worqr.on(queueName, event => {
 //     .then(() => worqr.startWorker())
 //     // fail to start task on unsubscribed queue
 //     .then(() => worqr.startTask('myQueue1').catch(console.error))
-//     // start all queues
+//     // start work on all queues
 //     .then(() => worqr.startWork('myQueue1'))
 //     .then(() => worqr.startWork('myQueue2'))
 //     .then(() => worqr.startWork('myQueue3'))
@@ -83,7 +83,7 @@ worqr.on(queueName, event => {
 //     .then(() => worqr.startTask('myQueue1'))
 //     // test stopping and starting a task
 //     .then(([processName, task]) => worqr.stopTask(processName as string))
-//     .then(() => worqr.startTask('myQueue3'))
+//     .then(() => worqr.startTask('myQueue1'))
 //     // stop work on queue 2
 //     .then(() => worqr.stopWork('myQueue2'))
 //     // test finishing a task
