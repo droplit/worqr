@@ -31,7 +31,7 @@ worqr.on(queueName, event => {
             const task = event.message;
 
             Promise.resolve()
-                .then(() => worqr.getProcessesForTask(task))
+                .then(() => worqr.getMatchingProcesses(task))
                 .then(processNames => Promise.all(processNames.map(processName => {
                     log(`finishing ${processName}`);
 
@@ -48,13 +48,6 @@ worqr.on(queueName, event => {
 
         Promise.resolve()
             .then(() => worqr.enqueue(queueName, task))
-            .then(() => {
-                // if (Math.random() > 0.5) {
-                //     setTimeout(() => {
-                //         worqr.cancelTasks(queueName, task);
-                //     }, 500);
-                // }
-            })
             .catch(console.error);
         createRandomTask();
     }, Math.random() * 5000);

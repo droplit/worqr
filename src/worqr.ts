@@ -147,22 +147,25 @@ export class Worqr extends EventEmitter {
         });
     }
 
-    public getProcessesForTask(task: string): Promise<string[]> {
+    public getTask(processName: string): Promise<string> {
+        return new Promise((resolve, reject) => {
+            this.publisher.lindex(`${this.processes}:${processName}`, 0, (err, task) => {
+                if (err) return reject(err);
+                resolve(task);
+            });
+        });
+    }
+
+    public getMatchingProcesses(task: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
             const processNamesForTask: string[] = [];
 
             Promise.resolve()
                 .then(() => this.getProcesses())
-                .then(processNames => Promise.all(processNames.map(processName => new Promise((resolve, reject) => {
-                    this.publisher.lindex(`${this.processes}:${processName}`, 0, (err, t) => {
-                        if (err) return reject(err);
-
-                        if (t === task) {
-                            processNamesForTask.push(processName);
-                        }
-
-                        resolve();
-                    });
+                .then(processNames => Promise.all(processNames.map(processName => this.getTask(processName).then(t => {
+                    if (t === task) {
+                        processNamesForTask.push(processName);
+                    }
                 }))))
                 .then(() => resolve(processNamesForTask))
                 .catch(err => reject(err));
