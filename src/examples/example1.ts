@@ -28,9 +28,9 @@ function handleEvent(worqr: Worqr, event: { type: string, message: string }) {
             Promise.resolve()
                 .then(() => worqr.startTask(queueName))
                 .then(([processName, task]) => {
-                    if (!task) return log(`did not get any tasks`);
+                    if (!task) return log(`${worqr.getWorkerId()} did not get any tasks`);
 
-                    log(`doing ${task}`);
+                    log(`${worqr.getWorkerId()} doing ${task}`);
 
                     setTimeout(() => {
                         worqr.finishTask(processName as string);

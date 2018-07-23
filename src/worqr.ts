@@ -46,6 +46,10 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    public getWorkerId(): string {
+        return this.workerId;
+    }
+
     // #region Queues
 
     public getQueueNames(): Promise<string[]> {
@@ -87,13 +91,29 @@ export class Worqr extends EventEmitter {
         log(`deleting ${queueName}`);
 
         return new Promise((resolve, reject) => {
-            this.publisher.multi()
-                .del(`${this.queues}:${queueName}`)
-                // TODO: need to do a lot of other stuff
-                .exec(err => {
-                    if (err) return reject(err);
-                    resolve();
-                });
+            Promise.resolve()
+                .then(() => this.getWorkingProcesses(queueName))
+                .then(processNames => {
+                    let multi = this.publisher.multi()
+                        .del(`${this.queues}:${queueName}`)
+                        .srem(`${this.workingQueues}:${this.workerId}`, queueName)
+                        .del(`${this.workingProcesses}:${queueName}`);
+
+                    processNames.forEach(processName => {
+                        multi = multi
+                            .del(`${this.processes}:${processName}`);
+                    });
+
+                    multi.exec(err => {
+                        if (err) return reject(err);
+
+                        this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
+                        this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
+
+                        resolve();
+                    });
+                })
+                .catch(err => reject(err));
         });
     }
 

@@ -9,6 +9,7 @@
         "start": "nodemon",
         "tslint": "tslint -t stylish 'src/**/*.ts' --force",
         "prepack": "npm run build",
+        "example": "ts-node -r dotenv/config ./src/examples/example1.ts",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "author": "Bryan Jenks (droplit.io), Samir Mammadov (droplit.io), Davis Kauffmann (droplit.io)",
