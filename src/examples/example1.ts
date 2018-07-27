@@ -22,8 +22,8 @@ worqr1.on(queueName, (event: any) => handleEvent(worqr1, event));
 worqr2.on(queueName, (event: any) => handleEvent(worqr2, event));
 worqr3.on(queueName, (event: any) => handleEvent(worqr3, event));
 
-function handleEvent(worqr: Worqr, event: { type: string, message: string }) {
-    switch (event.type) {
+function handleEvent(worqr: Worqr, { type, message }: { type: string, message: string }) {
+    switch (type) {
         case 'work':
             Promise.resolve()
                 .then(() => worqr.startTask(queueName))
@@ -39,7 +39,7 @@ function handleEvent(worqr: Worqr, event: { type: string, message: string }) {
                 .catch(console.error);
             break;
         case 'cancel':
-            const task = event.message;
+            const task = message;
 
             Promise.resolve()
                 .then(() => worqr.getMatchingProcesses(task))
