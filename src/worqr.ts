@@ -36,14 +36,6 @@ export class Worqr extends EventEmitter {
         this.workingQueues = `${this.redisKeyPrefix}:workingQueues`;
         this.workingProcesses = `${this.redisKeyPrefix}:workingProcesses`;
 
-        // this.publisher.auth(redisOptions.password, err => {
-        //     if (err) throw err;
-        // });
-
-        // this.subscriber.auth(redisOptions.password, err => {
-        //     if (err) throw err;
-        // });
-
         this.subscriber.on('message', (channel, message) => {
             const unprefixedChannel = channel.substr(channel.indexOf('_') + 1);
             const lastUnderscore = unprefixedChannel.lastIndexOf('_');
@@ -74,10 +66,7 @@ export class Worqr extends EventEmitter {
 
         return new Promise((resolve, reject) => {
             this.publisher.multi()
-                .lpush(`${this.queues}:${queueName}`, task, err => {
-                    if (err) return reject(err);
-                    resolve();
-                })
+                .lpush(`${this.queues}:${queueName}`, task)
                 .publish(`${this.redisKeyPrefix}_${queueName}_work`, task.toString())
                 .exec(err => {
                     if (err) return reject(err);
@@ -270,6 +259,7 @@ export class Worqr extends EventEmitter {
 
                     this.subscriber.subscribe(`${this.redisKeyPrefix}_${queueName}_work`);
                     this.subscriber.subscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
+                    this.subscriber.subscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
 
                     resolve();
                 });
@@ -325,6 +315,7 @@ export class Worqr extends EventEmitter {
 
                         this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
                         this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
+                        this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
 
                         resolve();
                     });
@@ -372,6 +363,7 @@ export class Worqr extends EventEmitter {
                         queueNames.forEach(queueName => {
                             this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
                             this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
+                            this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
                         });
 
                         if (this.workerTimerInterval) {

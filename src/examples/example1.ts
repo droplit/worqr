@@ -76,7 +76,7 @@ function handleEvent(worqr: Worqr, { type, message }: { type: string, message: s
             Promise.resolve()
                 .then(() => worqr.getMatchingProcesses(task))
                 .then(processNames => Promise.all(processNames.map(processName => {
-                    log(`finishing ${processName}`);
+                    log(`${worqr.getWorkerId()} finishing ${processName}`);
 
                     return worqr.stopTask(processName);
                 })))
@@ -85,7 +85,11 @@ function handleEvent(worqr: Worqr, { type, message }: { type: string, message: s
         case 'delete':
             Promise.resolve()
                 .then(() => worqr.stopWork(queueName))
+                .then(() => {
+                    log(`${worqr.getWorkerId()} stopped work on ${queueName}`);
+                })
                 .catch(console.error);
+            break;
     }
 }
 
@@ -105,8 +109,17 @@ function handleEvent(worqr: Worqr, { type, message }: { type: string, message: s
 })();
 
 // setTimeout(() => {
-//     worqr.deleteQueue(queueName);
-// });
+//     worqr.deleteQueue(queueName)
+//         .catch(console.error);
+// }, 10000);
+
+// setTimeout(() => {
+//     Promise.resolve()
+//         .then(() => worqr1.startWork(queueName))
+//         .then(() => worqr2.startWork(queueName))
+//         .then(() => worqr3.startWork(queueName))
+//         .catch(console.error);
+// }, 15000);
 
 // Promise.resolve()
 //     // create work queues
