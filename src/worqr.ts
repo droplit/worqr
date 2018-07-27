@@ -12,7 +12,7 @@ export class Worqr extends EventEmitter {
     private workerHeartbeatInterval = 1000;
     private workerTimeout = 3;
     private digestBiteSize = 0;
-    private digestInterval?: NodeJS.Timer;
+    private workerTimerInterval?: NodeJS.Timer;
     private queues: string;
     private processes: string;
     private workers: string;
@@ -20,7 +20,7 @@ export class Worqr extends EventEmitter {
     private workingQueues: string;
     private workingProcesses: string;
 
-    public constructor(redisOptions: { host: string, port: number, options?: redis.ClientOpts }, worqrOptions?: { redisKeyPrefix?: string, instanceId?: string, workerHeartbeatInterval?: number, workerTimeout?: number, digestBiteSize?: number }) {
+    public constructor(redisOptions: { host: string, port: number, password: string }, worqrOptions?: { redisKeyPrefix?: string, instanceId?: string, workerHeartbeatInterval?: number, workerTimeout?: number, digestBiteSize?: number }) {
         super();
         this.publisher = redis.createClient(redisOptions);
         this.subscriber = redis.createClient(redisOptions);
@@ -35,6 +35,14 @@ export class Worqr extends EventEmitter {
         this.workerTimers = `${this.redisKeyPrefix}:workerTimers`;
         this.workingQueues = `${this.redisKeyPrefix}:workingQueues`;
         this.workingProcesses = `${this.redisKeyPrefix}:workingProcesses`;
+
+        // this.publisher.auth(redisOptions.password, err => {
+        //     if (err) throw err;
+        // });
+
+        // this.subscriber.auth(redisOptions.password, err => {
+        //     if (err) throw err;
+        // });
 
         this.subscriber.on('message', (channel, message) => {
             const unprefixedChannel = channel.substr(channel.indexOf('_') + 1);
@@ -91,29 +99,13 @@ export class Worqr extends EventEmitter {
         log(`deleting ${queueName}`);
 
         return new Promise((resolve, reject) => {
-            Promise.resolve()
-                .then(() => this.getWorkingProcesses(queueName))
-                .then(processNames => {
-                    let multi = this.publisher.multi()
-                        .del(`${this.queues}:${queueName}`)
-                        .srem(`${this.workingQueues}:${this.workerId}`, queueName)
-                        .del(`${this.workingProcesses}:${queueName}`);
-
-                    processNames.forEach(processName => {
-                        multi = multi
-                            .del(`${this.processes}:${processName}`);
-                    });
-
-                    multi.exec(err => {
-                        if (err) return reject(err);
-
-                        this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
-                        this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
-
-                        resolve();
-                    });
-                })
-                .catch(err => reject(err));
+            this.publisher.multi()
+                .del(`${this.queues}:${queueName}`)
+                .publish(`${this.redisKeyPrefix}_${queueName}_delete`, '1')
+                .exec(err => {
+                    if (err) return reject(err);
+                    resolve();
+                });
         });
     }
 
@@ -248,7 +240,7 @@ export class Worqr extends EventEmitter {
                 .exec(err => {
                     if (err) return reject(err);
 
-                    this.digestInterval = setInterval(() => {
+                    this.workerTimerInterval = setInterval(() => {
                         this.keepWorkerAlive();
                     }, this.workerHeartbeatInterval);
 
@@ -382,8 +374,8 @@ export class Worqr extends EventEmitter {
                             this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
                         });
 
-                        if (this.digestInterval) {
-                            clearInterval(this.digestInterval);
+                        if (this.workerTimerInterval) {
+                            clearInterval(this.workerTimerInterval);
                         }
 
                         resolve();

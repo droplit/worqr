@@ -2,10 +2,42 @@ import { Worqr } from '../index';
 
 const log = require('debug')('worqr:client');
 
-const worqr = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), options: { password: process.env.REDIS_PASSWORD } });
-const worqr1 = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), options: { password: process.env.REDIS_PASSWORD } });
-const worqr2 = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), options: { password: process.env.REDIS_PASSWORD } });
-const worqr3 = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), options: { password: process.env.REDIS_PASSWORD } });
+const worqr = new Worqr(
+    {
+        host: <string>process.env.REDIS_HOST,
+        port: Number.parseInt(<string>process.env.REDIS_PORT),
+        password: <string>process.env.REDIS_PASSWORD
+    },
+    {
+        redisKeyPrefix: 'myWorqr'
+    });
+const worqr1 = new Worqr(
+    {
+        host: <string>process.env.REDIS_HOST,
+        port: Number.parseInt(<string>process.env.REDIS_PORT),
+        password: <string>process.env.REDIS_PASSWORD
+    },
+    {
+        redisKeyPrefix: 'myWorqr'
+    });
+const worqr2 = new Worqr(
+    {
+        host: <string>process.env.REDIS_HOST,
+        port: Number.parseInt(<string>process.env.REDIS_PORT),
+        password: <string>process.env.REDIS_PASSWORD
+    },
+    {
+        redisKeyPrefix: 'myWorqr'
+    });
+const worqr3 = new Worqr(
+    {
+        host: <string>process.env.REDIS_HOST,
+        port: Number.parseInt(<string>process.env.REDIS_PORT),
+        password: <string>process.env.REDIS_PASSWORD
+    },
+    {
+        redisKeyPrefix: 'myWorqr'
+    });
 
 const queueName = 'myQueue';
 
@@ -50,6 +82,10 @@ function handleEvent(worqr: Worqr, { type, message }: { type: string, message: s
                 })))
                 .catch(console.error);
             break;
+        case 'delete':
+            Promise.resolve()
+                .then(() => worqr.stopWork(queueName))
+                .catch(console.error);
     }
 }
 
@@ -67,6 +103,10 @@ function handleEvent(worqr: Worqr, { type, message }: { type: string, message: s
         createRandomTask();
     }, Math.random() * 5000);
 })();
+
+// setTimeout(() => {
+//     worqr.deleteQueue(queueName);
+// });
 
 // Promise.resolve()
 //     // create work queues
