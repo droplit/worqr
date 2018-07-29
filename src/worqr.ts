@@ -49,26 +49,8 @@ export class Worqr extends EventEmitter {
         });
 
         setInterval(() => {
-            Promise.resolve()
-                .then(() => this.getWorkers())
-                .then(workerNames => Promise.all(workerNames.map(workerName => new Promise<[string, boolean]>((resolve, reject) => {
-                    this.publisher.keys(`${this.workerTimers}:${workerName}`, (err, workerTimers) => {
-                        if (err) return reject(err);
-                        resolve([workerName, workerTimers.length === 0]);
-                    });
-                }))))
-                .then(results => {
-                    results.forEach(([workerName, dead]) => {
-                        if (dead) {
-                            this.failWorker(workerName);
-                        }
-                    });
-                });
+            this.cleanupWorkers();
         }, this.workerCleanupInterval);
-    }
-
-    public getWorkerId(): string {
-        return this.workerId;
     }
 
     // #region Queues
@@ -258,6 +240,10 @@ export class Worqr extends EventEmitter {
 
     // #region Worker
 
+    public getWorkerId(): string {
+        return this.workerId;
+    }
+
     public startWorker(): Promise<void> {
         log(`starting worker ${this.workerId}`);
 
@@ -339,6 +325,19 @@ export class Worqr extends EventEmitter {
                     });
                 })
                 .catch(err => reject(err));
+        });
+    }
+
+    // #endregion
+
+    // #region Working Processes
+
+    public getWorkingProcesses(queueName: string): Promise<string[]> {
+        return new Promise((resolve, reject) => {
+            this.publisher.smembers(`${this.workingProcesses}:${queueName}`, (err, processNames) => {
+                if (err) return reject(err);
+                resolve(processNames);
+            });
         });
     }
 
@@ -428,16 +427,21 @@ export class Worqr extends EventEmitter {
         });
     }
 
-    // #endregion
-
-    // #region Working Processes
-
-    public getWorkingProcesses(queueName: string): Promise<string[]> {
+    public cleanupWorkers(): Promise<void> {
         return new Promise((resolve, reject) => {
-            this.publisher.smembers(`${this.workingProcesses}:${queueName}`, (err, processNames) => {
-                if (err) return reject(err);
-                resolve(processNames);
-            });
+            Promise.resolve()
+                .then(() => this.getWorkers())
+                .then(workerNames => Promise.all(workerNames.map(workerName => new Promise<[string, boolean]>((resolve, reject) => {
+                    this.publisher.keys(`${this.workerTimers}:${workerName}`, (err, workerTimers) => {
+                        if (err) return reject(err);
+                        resolve([workerName, workerTimers.length === 0]);
+                    });
+                }))))
+                .then(results => Promise.all(results
+                    .filter(([workerName, dead]) => dead)
+                    .map(([workerName, dead]) => this.failWorker(workerName))))
+                .then(() => resolve())
+                .catch(err => reject(err));
         });
     }
 
