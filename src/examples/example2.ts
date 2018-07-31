@@ -33,22 +33,22 @@ Promise.resolve()
     // start tasks
     .then(() => worqr.startTask('myQueue1'))
     // test stopping and starting a task
-    .then(([processName, task]) => worqr.stopTask(processName as string))
+    .then(process => process ? worqr.stopTask(process.processName) : Promise.resolve())
     .then(() => worqr.startTask('myQueue1'))
     // stop work on queue 2
     .then(() => worqr.stopWork('myQueue2'))
     // test finishing a task
     .then(() => worqr.startTask('myQueue3'))
-    .then(([processName, task]) => worqr.finishTask(processName as string))
+    .then(process => process ? worqr.finishTask(process.processName) : Promise.resolve())
     // start and finish another task
     .then(() => worqr.startTask('myQueue3'))
-    .then(([processName, task]) => worqr.finishTask(processName as string))
+    .then(process => process ? worqr.finishTask(process.processName) : Promise.resolve())
     // verify the queue exists
     .then(() => worqr.isQueue('myQueue3'))
     .then(exists => console.log(`myQueue3 exists: ${exists}`))
     // start and finish the last task
     .then(() => worqr.startTask('myQueue3'))
-    .then(([processName, task]) => worqr.finishTask(processName as string))
+    .then(process => process ? worqr.finishTask(process.processName) : Promise.resolve())
     // verify the queue does not exist
     .then(() => worqr.isQueue('myQueue3'))
     .then(exists => console.log(`myQueue3 exists: ${exists}`))

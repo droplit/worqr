@@ -4,7 +4,25 @@ import * as uuid from 'uuid';
 
 const log = require('debug')('worqr');
 
-// TODO: periodically check for tasks in queues and emit events
+/**
+ * Represents a process started by a worker.
+ */
+export interface Process {
+    processName: string;
+    task: string;
+}
+
+/**
+ * Event emitted by a queue.
+ */
+export interface QueueEvent {
+    type: string;
+    message: string;
+}
+
+/**
+ * A distributed, reliable, job queueing system that uses redis as a backend.
+ */
 export class Worqr extends EventEmitter {
     private publisher: redis.RedisClient;
     private subscriber: redis.RedisClient;
@@ -123,13 +141,13 @@ export class Worqr extends EventEmitter {
 
     // #region Tasks
 
-    public startTask(queueName: string): Promise<[string | null, string | null]> {
+    public startTask(queueName: string): Promise<Process | null> {
         log(`${this.workerId} starting task on ${queueName}`);
 
         return new Promise((resolve, reject) => {
             Promise.resolve()
                 .then(() => this.isWorking(this.workerId, queueName))
-                .then(isWorking => new Promise<[string, string]>((resolve, reject) => {
+                .then(isWorking => new Promise<Process>((resolve, reject) => {
                     if (!isWorking) return reject(`${this.workerId} is not working on ${queueName}`);
 
                     const processName = `${queueName}_${uuid.v4()}`;
@@ -139,17 +157,19 @@ export class Worqr extends EventEmitter {
                         .sadd(`${this.workingProcesses}:${queueName}`, processName)
                         .exec((err, [task]) => {
                             if (err) return reject(err);
-                            resolve([processName, task]);
+                            resolve({ processName, task });
                         });
                 }))
-                .then(([processName, task]) => {
+                .then(process => {
+                    const { processName, task } = process;
+
                     if (!task) {
                         this.publisher.srem(`${this.workingProcesses}:${queueName}`, processName, err => {
                             if (err) return reject(err);
-                            resolve([null, null]);
+                            resolve(null);
                         });
                     } else {
-                        resolve([processName, task]);
+                        resolve(process);
                     }
                 })
                 .catch(err => reject(err));
