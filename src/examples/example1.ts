@@ -33,7 +33,7 @@ function handleEvent(worqr: Worqr, event: QueueEvent) {
 
                     // simulate a long async task
                     setTimeout(() => {
-                        worqr.finishTask(processName);
+                        worqr.finishProcess(processName);
                     }, Math.random() * 5000);
                 })
                 .catch(console.error);
@@ -48,7 +48,7 @@ function handleEvent(worqr: Worqr, event: QueueEvent) {
                 .then(processNames => Promise.all(processNames.map(processName => {
                     log(`${worqr.getWorkerId()} finishing ${processName}`);
 
-                    return worqr.stopTask(processName);
+                    return worqr.stopProcess(processName);
                 })))
                 .catch(console.error);
             break;

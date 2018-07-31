@@ -16,7 +16,7 @@ export interface Process {
  * Event emitted by a queue.
  */
 export interface QueueEvent {
-    type: string;
+    type: 'work' | 'cancel' | 'delete';
     message: string;
 }
 
@@ -30,7 +30,7 @@ export class Worqr extends EventEmitter {
     private workerId = uuid.v4();
     private workerHeartbeatInterval = 1000;
     private workerTimeout = 3;
-    private workerCleanupInterval = 10;
+    private workerCleanupInterval = 10000;
     private digestBiteSize = 0;
     private workerTimerInterval?: NodeJS.Timer;
     private queues: string;
@@ -73,6 +73,9 @@ export class Worqr extends EventEmitter {
 
     // #region Queues
 
+    /**
+     * Returns a list of all queues.
+     */
     public getQueueNames(): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.publisher.keys(`${this.queues}*`, (err, queueNames) => {
@@ -82,6 +85,10 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Enqueues a task on a queue, emitting an event with `type: 'work'`.
+     * Clients should listen for this event and start tasks on the queue.
+     */
     public enqueue(queueName: string, task: string | string[]): Promise<void> {
         log(`queueing ${task.toString()} to ${queueName}`);
 
@@ -96,6 +103,9 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Returns whether there is a queue with this name.
+     */
     public isQueue(queueName: string): Promise<boolean> {
         return new Promise((resolve, reject) => {
             this.publisher.exists(`${this.queues}:${queueName}`, (err, exists) => {
@@ -105,6 +115,9 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Returns the next task on a queue.
+     */
     public peekQueue(queueName: string): Promise<string> {
         return new Promise((resolve, reject) => {
             this.publisher.lindex(`${this.queues}:${queueName}`, 0, (err, task) => {
@@ -114,6 +127,9 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Returns the number of tasks in a queue.
+     */
     public getQueueCount(queueName: string): Promise<number> {
         return new Promise((resolve, reject) => {
             this.publisher.llen(`${this.queues}:${queueName}`, (err, len) => {
@@ -123,6 +139,10 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Deletes a queue, emitting and event with `type: 'delete'`.
+     * Clients should listen for this event and stop work on the queue.
+     */
     public deleteQueue(queueName: string): Promise<void> {
         log(`deleting ${queueName}`);
 
@@ -141,6 +161,10 @@ export class Worqr extends EventEmitter {
 
     // #region Tasks
 
+    /**
+     * Dequeues a task from the queue, returning a process name and a task.
+     * The worker must have started work on the queue in order to get tasks.
+     */
     public startTask(queueName: string): Promise<Process | null> {
         log(`${this.workerId} starting task on ${queueName}`);
 
@@ -176,6 +200,9 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Returns a list of all processes running.
+     */
     public getProcesses(): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.publisher.keys(`${this.processes}*`, (err, processNames) => {
@@ -185,6 +212,9 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Returns the task for a given process.
+     */
     public getTask(processName: string): Promise<string> {
         return new Promise((resolve, reject) => {
             this.publisher.lindex(`${this.processes}:${processName}`, 0, (err, task) => {
@@ -194,6 +224,9 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Returns a list of processes that have tasks matching the given task.
+     */
     public getMatchingProcesses(task: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
             const processNamesForTask: string[] = [];
@@ -210,7 +243,10 @@ export class Worqr extends EventEmitter {
         });
     }
 
-    public stopTask(processName: string): Promise<void> {
+    /**
+     * Stops a process, returning its task to the queue it came from.
+     */
+    public stopProcess(processName: string): Promise<void> {
         log(`stopping process ${processName}`);
 
         return new Promise((resolve, reject) => {
@@ -226,7 +262,10 @@ export class Worqr extends EventEmitter {
         });
     }
 
-    public finishTask(processName: string): Promise<void> {
+    /**
+     * Stops a process, removing the task entirely.
+     */
+    public finishProcess(processName: string): Promise<void> {
         log(`finishing process ${processName}`);
 
         return new Promise((resolve, reject) => {
@@ -242,6 +281,10 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Removes a task from the queue, emitting an event with `type: 'cancel', message: <task>`.
+     * Clients should listen for this event and stop all processes matching the task.
+     */
     public cancelTasks(queueName: string, task: string): Promise<void> {
         log(`canceling tasks ${task}`);
 
@@ -260,10 +303,16 @@ export class Worqr extends EventEmitter {
 
     // #region Worker
 
+    /**
+     * Returns the unique worker ID for this instance.
+     */
     public getWorkerId(): string {
         return this.workerId;
     }
 
+    /**
+     * Starts this worker.
+     */
     public startWorker(): Promise<void> {
         log(`starting worker ${this.workerId}`);
 
@@ -283,6 +332,9 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Refreshes this worker's timer, indicating it is still active.
+     */
     public keepWorkerAlive(): Promise<void> {
         return new Promise((resolve, reject) => {
             this.publisher.set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout, 'XX', (err, success) => {
@@ -293,6 +345,10 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Starts work on a queue.
+     * The worker will start emitting events for the queue, which clients should subscribe to.
+     */
     public startWork(queueName: string): Promise<void> {
         log(`${this.workerId} starting work on ${queueName}`);
 
@@ -317,6 +373,10 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Stops work on a queue.
+     * The worker will stop emitting events for the queue.
+     */
     public stopWork(queueName: string): Promise<void> {
         log(`${this.workerId} stopping work on ${queueName}`);
 
@@ -352,6 +412,9 @@ export class Worqr extends EventEmitter {
 
     // #region Working Processes
 
+    /**
+     * Returns a list of all processes running on a queue.
+     */
     public getWorkingProcesses(queueName: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.publisher.smembers(`${this.workingProcesses}:${queueName}`, (err, processNames) => {
@@ -365,6 +428,9 @@ export class Worqr extends EventEmitter {
 
     // #region Workers
 
+    /**
+     * Returns a list of all workers.
+     */
     public getWorkers(): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.publisher.smembers(this.workers, (err, workerNames) => {
@@ -374,6 +440,9 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Returns whether a worker is working on a queue.
+     */
     public isWorking(workerName: string, queueName: string): Promise<boolean> {
         return new Promise((resolve, reject) => {
             this.publisher.sismember(`${this.workingQueues}:${workerName}`, queueName, (err, isMember) => {
@@ -383,6 +452,9 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Returns a list of all queues a worker is working on.
+     */
     public getWorkingQueues(workerName: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.publisher.smembers(`${this.workingQueues}:${workerName}`, (err, queueNames) => {
@@ -392,6 +464,9 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Fails a worker, putting all its tasks back on the queues they came from.
+     */
     public failWorker(workerName: string): Promise<void> {
         log(`failing ${workerName}`);
 
@@ -447,6 +522,10 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Fails all workers that have timed out.
+     * This is run every `workerCleanupInterval` milliseconds.
+     */
     public cleanupWorkers(): Promise<void> {
         return new Promise((resolve, reject) => {
             Promise.resolve()
