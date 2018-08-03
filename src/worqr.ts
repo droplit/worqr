@@ -24,8 +24,8 @@ export interface QueueEvent {
  * A distributed, reliable, job queueing system that uses redis as a backend.
  */
 export class Worqr extends EventEmitter {
-    private publisher: redis.RedisClient;
-    private subscriber: redis.RedisClient;
+    private pub: redis.RedisClient;
+    private sub: redis.RedisClient;
     private redisKeyPrefix = 'worqr';
     private workerId = uuid.v4();
     private workerHeartbeatInterval = 1000;
@@ -40,10 +40,13 @@ export class Worqr extends EventEmitter {
     private workingQueues: string;
     private workingProcesses: string;
 
+    /**
+     * Creates a Worqr instance.
+     */
     public constructor(redisOptions: { host: string, port: number, password: string }, worqrOptions?: { redisKeyPrefix?: string, instanceId?: string, workerHeartbeatInterval?: number, workerTimeout?: number, workerCleanupInterval?: number, digestBiteSize?: number }) {
         super();
-        this.publisher = redis.createClient(redisOptions);
-        this.subscriber = redis.createClient(redisOptions);
+        this.pub = redis.createClient(redisOptions);
+        this.sub = redis.createClient(redisOptions);
         this.redisKeyPrefix = (worqrOptions && worqrOptions.redisKeyPrefix) || this.redisKeyPrefix;
         this.workerId = (worqrOptions && worqrOptions.instanceId) || this.workerId;
         this.workerHeartbeatInterval = (worqrOptions && worqrOptions.workerHeartbeatInterval) || this.workerHeartbeatInterval;
@@ -57,7 +60,7 @@ export class Worqr extends EventEmitter {
         this.workingQueues = `${this.redisKeyPrefix}:workingQueues`;
         this.workingProcesses = `${this.redisKeyPrefix}:workingProcesses`;
 
-        this.subscriber.on('message', (channel, message) => {
+        this.sub.on('message', (channel, message) => {
             const unprefixedChannel = channel.substr(channel.indexOf('_') + 1);
             const lastUnderscore = unprefixedChannel.lastIndexOf('_');
             const queueName = unprefixedChannel.substr(0, lastUnderscore);
@@ -78,7 +81,7 @@ export class Worqr extends EventEmitter {
      */
     public getQueueNames(): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.publisher.keys(`${this.queues}*`, (err, queueNames) => {
+            this.pub.keys(`${this.queues}*`, (err, queueNames) => {
                 if (err) return reject(err);
                 resolve(queueNames.map(queueName => queueName.split(':')[2]));
             });
@@ -93,7 +96,7 @@ export class Worqr extends EventEmitter {
         log(`queueing ${task.toString()} to ${queueName}`);
 
         return new Promise((resolve, reject) => {
-            this.publisher.multi()
+            this.pub.multi()
                 .lpush(`${this.queues}:${queueName}`, task)
                 .publish(`${this.redisKeyPrefix}_${queueName}_work`, '1')
                 .exec(err => {
@@ -108,7 +111,7 @@ export class Worqr extends EventEmitter {
      */
     public isQueue(queueName: string): Promise<boolean> {
         return new Promise((resolve, reject) => {
-            this.publisher.exists(`${this.queues}:${queueName}`, (err, exists) => {
+            this.pub.exists(`${this.queues}:${queueName}`, (err, exists) => {
                 if (err) return reject(err);
                 resolve(exists === 1);
             });
@@ -120,7 +123,7 @@ export class Worqr extends EventEmitter {
      */
     public peekQueue(queueName: string): Promise<string> {
         return new Promise((resolve, reject) => {
-            this.publisher.lindex(`${this.queues}:${queueName}`, 0, (err, task) => {
+            this.pub.lindex(`${this.queues}:${queueName}`, 0, (err, task) => {
                 if (err) return reject(err);
                 resolve(task);
             });
@@ -132,7 +135,7 @@ export class Worqr extends EventEmitter {
      */
     public getQueueCount(queueName: string): Promise<number> {
         return new Promise((resolve, reject) => {
-            this.publisher.llen(`${this.queues}:${queueName}`, (err, len) => {
+            this.pub.llen(`${this.queues}:${queueName}`, (err, len) => {
                 if (err) return reject(err);
                 resolve(len);
             });
@@ -147,7 +150,7 @@ export class Worqr extends EventEmitter {
         log(`deleting ${queueName}`);
 
         return new Promise((resolve, reject) => {
-            this.publisher.multi()
+            this.pub.multi()
                 .del(`${this.queues}:${queueName}`)
                 .publish(`${this.redisKeyPrefix}_${queueName}_delete`, '1')
                 .exec(err => {
@@ -162,7 +165,7 @@ export class Worqr extends EventEmitter {
     // #region Tasks
 
     /**
-     * Dequeues a task from the queue, returning a process name and a task.
+     * Dequeues a task from the queue, returning a process.
      * The worker must have started work on the queue in order to get tasks.
      */
     public startTask(queueName: string): Promise<Process | null> {
@@ -176,7 +179,7 @@ export class Worqr extends EventEmitter {
 
                     const processName = `${queueName}_${uuid.v4()}`;
 
-                    this.publisher.multi()
+                    this.pub.multi()
                         .rpoplpush(`${this.queues}:${queueName}`, `${this.processes}:${processName}`)
                         .sadd(`${this.workingProcesses}:${queueName}`, processName)
                         .exec((err, [task]) => {
@@ -188,7 +191,7 @@ export class Worqr extends EventEmitter {
                     const { processName, task } = process;
 
                     if (!task) {
-                        this.publisher.srem(`${this.workingProcesses}:${queueName}`, processName, err => {
+                        this.pub.srem(`${this.workingProcesses}:${queueName}`, processName, err => {
                             if (err) return reject(err);
                             resolve(null);
                         });
@@ -205,7 +208,7 @@ export class Worqr extends EventEmitter {
      */
     public getProcesses(): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.publisher.keys(`${this.processes}*`, (err, processNames) => {
+            this.pub.keys(`${this.processes}*`, (err, processNames) => {
                 if (err) return reject(err);
                 resolve(processNames.map(processName => processName.split(':')[2]));
             });
@@ -217,7 +220,7 @@ export class Worqr extends EventEmitter {
      */
     public getTask(processName: string): Promise<string> {
         return new Promise((resolve, reject) => {
-            this.publisher.lindex(`${this.processes}:${processName}`, 0, (err, task) => {
+            this.pub.lindex(`${this.processes}:${processName}`, 0, (err, task) => {
                 if (err) return reject(err);
                 resolve(task);
             });
@@ -225,7 +228,7 @@ export class Worqr extends EventEmitter {
     }
 
     /**
-     * Returns a list of processes that have tasks matching the given task.
+     * Returns a list of processes for tasks matching the given task.
      */
     public getMatchingProcesses(task: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
@@ -252,7 +255,7 @@ export class Worqr extends EventEmitter {
         return new Promise((resolve, reject) => {
             const queueName = processName.split('_')[0];
 
-            this.publisher.multi()
+            this.pub.multi()
                 .rpoplpush(`${this.processes}:${processName}`, `${this.queues}:${queueName}`)
                 .srem(`${this.workingProcesses}:${queueName}`, processName)
                 .exec(err => {
@@ -271,7 +274,7 @@ export class Worqr extends EventEmitter {
         return new Promise((resolve, reject) => {
             const queueName = processName.split('_')[0];
 
-            this.publisher.multi()
+            this.pub.multi()
                 .del(`${this.processes}:${processName}`)
                 .srem(`${this.workingProcesses}:${queueName}`, processName)
                 .exec(err => {
@@ -289,7 +292,7 @@ export class Worqr extends EventEmitter {
         log(`canceling tasks ${task}`);
 
         return new Promise((resolve, reject) => {
-            this.publisher.multi()
+            this.pub.multi()
                 .lrem(`${this.queues}:${queueName}`, 0, task)
                 .publish(`${this.redisKeyPrefix}_${queueName}_cancel`, task)
                 .exec(err => {
@@ -317,7 +320,7 @@ export class Worqr extends EventEmitter {
         log(`starting worker ${this.workerId}`);
 
         return new Promise((resolve, reject) => {
-            this.publisher.multi()
+            this.pub.multi()
                 .sadd(this.workers, this.workerId)
                 .set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout)
                 .exec(err => {
@@ -337,7 +340,7 @@ export class Worqr extends EventEmitter {
      */
     public keepWorkerAlive(): Promise<void> {
         return new Promise((resolve, reject) => {
-            this.publisher.set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout, 'XX', (err, success) => {
+            this.pub.set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout, 'XX', (err, success) => {
                 if (err) return reject(err);
                 if (!success) return this.failWorker(this.workerId);
                 resolve();
@@ -353,18 +356,18 @@ export class Worqr extends EventEmitter {
         log(`${this.workerId} starting work on ${queueName}`);
 
         return new Promise((resolve, reject) => {
-            this.publisher.multi()
+            this.pub.multi()
                 .sadd(`${this.workingQueues}:${this.workerId}`, queueName)
                 .exec(err => {
                     if (err) return reject(err);
 
-                    this.subscriber.subscribe(`${this.redisKeyPrefix}_${queueName}_work`);
-                    this.subscriber.subscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
-                    this.subscriber.subscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
+                    this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_work`);
+                    this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
+                    this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
 
                     this.isQueue(queueName).then(isQueue => {
                         if (isQueue) {
-                            this.publisher.publish(`${this.redisKeyPrefix}_${queueName}_work`, '1');
+                            this.pub.publish(`${this.redisKeyPrefix}_${queueName}_work`, '1');
                         }
                     });
 
@@ -384,7 +387,7 @@ export class Worqr extends EventEmitter {
             Promise.resolve()
                 .then(() => this.getWorkingProcesses(queueName))
                 .then(processNames => {
-                    let multi = this.publisher.multi()
+                    let multi = this.pub.multi()
                         .srem(`${this.workingQueues}:${this.workerId}`, queueName)
                         .del(`${this.workingProcesses}:${queueName}`);
 
@@ -397,9 +400,9 @@ export class Worqr extends EventEmitter {
                     multi.exec(err => {
                         if (err) return reject(err);
 
-                        this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
-                        this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
-                        this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
+                        this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
+                        this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
+                        this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
 
                         resolve();
                     });
@@ -417,7 +420,7 @@ export class Worqr extends EventEmitter {
      */
     public getWorkingProcesses(queueName: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.publisher.smembers(`${this.workingProcesses}:${queueName}`, (err, processNames) => {
+            this.pub.smembers(`${this.workingProcesses}:${queueName}`, (err, processNames) => {
                 if (err) return reject(err);
                 resolve(processNames);
             });
@@ -433,7 +436,7 @@ export class Worqr extends EventEmitter {
      */
     public getWorkers(): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.publisher.smembers(this.workers, (err, workerNames) => {
+            this.pub.smembers(this.workers, (err, workerNames) => {
                 if (err) return reject(err);
                 resolve(workerNames);
             });
@@ -445,7 +448,7 @@ export class Worqr extends EventEmitter {
      */
     public isWorking(workerName: string, queueName: string): Promise<boolean> {
         return new Promise((resolve, reject) => {
-            this.publisher.sismember(`${this.workingQueues}:${workerName}`, queueName, (err, isMember) => {
+            this.pub.sismember(`${this.workingQueues}:${workerName}`, queueName, (err, isMember) => {
                 if (err) return reject(err);
                 resolve(isMember === 1);
             });
@@ -457,7 +460,7 @@ export class Worqr extends EventEmitter {
      */
     public getWorkingQueues(workerName: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.publisher.smembers(`${this.workingQueues}:${workerName}`, (err, queueNames) => {
+            this.pub.smembers(`${this.workingQueues}:${workerName}`, (err, queueNames) => {
                 if (err) return reject(err);
                 resolve(queueNames);
             });
@@ -471,18 +474,26 @@ export class Worqr extends EventEmitter {
         log(`failing ${workerName}`);
 
         return new Promise((resolve, reject) => {
+            /**
+             * Represents queues and processes that this worker is working on.
+             */
+            interface WorkerItems {
+                queueNames: string[];
+                processNames: string[];
+            }
+
             Promise.resolve()
                 .then(() => this.getWorkingQueues(workerName))
-                .then(queueNames => new Promise<[string[], string[]]>((resolve, reject) => {
+                .then(queueNames => new Promise<WorkerItems>((resolve, reject) => {
                     const processNames: string[] = [];
 
                     Promise.all(queueNames.map(queueName => this.getWorkingProcesses(queueName)))
                         .then(processNames2d => processNames2d.forEach(processNames1d => processNames.push(...processNames1d)))
-                        .then(() => resolve([queueNames, processNames]))
+                        .then(() => resolve({ queueNames, processNames }))
                         .catch(err => reject(err));
                 }))
-                .then(([queueNames, processNames]) => {
-                    let multi = this.publisher.multi()
+                .then(({ queueNames, processNames }) => {
+                    let multi = this.pub.multi()
                         .srem(this.workers, workerName)
                         .del(`${this.workerTimers}:${workerName}`)
                         .del(`${this.workingQueues}:${workerName}`);
@@ -505,9 +516,9 @@ export class Worqr extends EventEmitter {
 
                         if (workerName === this.workerId) {
                             queueNames.forEach(queueName => {
-                                this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
-                                this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
-                                this.subscriber.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
+                                this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
+                                this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
+                                this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
                             });
 
                             if (this.workerTimerInterval) {
@@ -528,17 +539,25 @@ export class Worqr extends EventEmitter {
      */
     public cleanupWorkers(): Promise<void> {
         return new Promise((resolve, reject) => {
+            /**
+             * Represents whether a worker is dead.
+             */
+            interface WorkerStatus {
+                workerName: string;
+                dead: boolean;
+            }
+
             Promise.resolve()
                 .then(() => this.getWorkers())
-                .then(workerNames => Promise.all(workerNames.map(workerName => new Promise<[string, boolean]>((resolve, reject) => {
-                    this.publisher.keys(`${this.workerTimers}:${workerName}`, (err, workerTimers) => {
+                .then(workerNames => Promise.all(workerNames.map(workerName => new Promise<WorkerStatus>((resolve, reject) => {
+                    this.pub.keys(`${this.workerTimers}:${workerName}`, (err, workerTimers) => {
                         if (err) return reject(err);
-                        resolve([workerName, workerTimers.length === 0]);
+                        resolve({ workerName, dead: workerTimers.length === 0 });
                     });
                 }))))
                 .then(results => Promise.all(results
-                    .filter(([workerName, dead]) => dead)
-                    .map(([workerName, dead]) => this.failWorker(workerName))))
+                    .filter(({ workerName, dead }) => workerName !== this.workerId && dead)
+                    .map(({ workerName }) => this.failWorker(workerName))))
                 .then(() => resolve())
                 .catch(err => reject(err));
         });
