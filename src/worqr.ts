@@ -470,7 +470,9 @@ export class Worqr extends EventEmitter {
     /**
      * Fails a worker, putting all its tasks back on the queues they came from.
      */
-    public failWorker(workerName: string): Promise<void> {
+    public failWorker(workerName?: string): Promise<void> {
+        if (!workerName) workerName = this.workerId;
+
         log(`failing ${workerName}`);
 
         return new Promise((resolve, reject) => {
@@ -483,7 +485,7 @@ export class Worqr extends EventEmitter {
             }
 
             Promise.resolve()
-                .then(() => this.getWorkingQueues(workerName))
+                .then(() => this.getWorkingQueues(workerName as string))
                 .then(queueNames => new Promise<WorkerItems>((resolve, reject) => {
                     const processNames: string[] = [];
 
@@ -494,7 +496,7 @@ export class Worqr extends EventEmitter {
                 }))
                 .then(({ queueNames, processNames }) => {
                     let multi = this.pub.multi()
-                        .srem(this.workers, workerName)
+                        .srem(this.workers, workerName as string)
                         .del(`${this.workerTimers}:${workerName}`)
                         .del(`${this.workingQueues}:${workerName}`);
 
