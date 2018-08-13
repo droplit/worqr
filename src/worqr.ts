@@ -167,6 +167,7 @@ export class Worqr extends EventEmitter {
     /**
      * Dequeues a task from the queue, returning a process.
      * The worker must have started work on the queue in order to get tasks.
+     * Process will be null if the queue is empty.
      */
     public startTask(queueName: string): Promise<Process | null> {
         log(`${this.workerId} starting task on ${queueName}`);

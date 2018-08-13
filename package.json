@@ -6,11 +6,11 @@
     "types": "dist/index",
     "scripts": {
         "build": "npm run tslint && tsc",
-        "start": "nodemon",
-        "tslint": "tslint -t stylish 'src/**/*.ts' --force",
+        "example": "ts-node -r dotenv/config ./src/example.ts",
         "prepack": "npm run build",
-        "example": "ts-node -r dotenv/config ./src/examples/example1.ts",
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "start": "nodemon",
+        "test": "mocha --exit -r ts-node/register ./src/test.ts",
+        "tslint": "tslint -t stylish 'src/**/*.ts' --force"
     },
     "author": "Bryan Jenks (droplit.io), Samir Mammadov (droplit.io), Davis Kauffmann (droplit.io)",
     "license": "ISC",
@@ -20,10 +20,14 @@
         "uuid": "^3.3.2"
     },
     "devDependencies": {
+        "@types/chai": "^4.1.4",
+        "@types/mocha": "^5.2.5",
         "@types/node": "^9.4.6",
         "@types/redis": "^2.8.6",
         "@types/uuid": "^3.4.3",
+        "chai": "^4.1.2",
         "dotenv": "^5.0.1",
+        "mocha": "^5.2.0",
         "nodemon": "^1.14.12",
         "ts-node": "^6.1.0",
         "tslint": "^5.11.0",

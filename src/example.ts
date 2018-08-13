@@ -1,13 +1,29 @@
-import { Worqr, QueueEvent } from '../index';
+import { Worqr, QueueEvent } from './';
 
 const log = require('debug')('worqr:client');
 
 // in this example, the main worker is just responsible for putting tasks on the queue periodically
 // the other 3 are set up to pull work off of the queue
-const worqr = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), password: <string>process.env.REDIS_PASSWORD }, { redisKeyPrefix: 'myWorqr' });
-const worqr1 = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), password: <string>process.env.REDIS_PASSWORD }, { redisKeyPrefix: 'myWorqr' });
-const worqr2 = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), password: <string>process.env.REDIS_PASSWORD }, { redisKeyPrefix: 'myWorqr' });
-const worqr3 = new Worqr({ host: <string>process.env.REDIS_HOST, port: Number.parseInt(<string>process.env.REDIS_PORT), password: <string>process.env.REDIS_PASSWORD }, { redisKeyPrefix: 'myWorqr' });
+const worqr = new Worqr({
+    host: process.env.REDIS_HOST as string,
+    port: Number.parseInt(process.env.REDIS_PORT as string),
+    password: process.env.REDIS_PASSWORD as string
+}, { redisKeyPrefix: 'myWorqr' });
+const worqr1 = new Worqr({
+    host: process.env.REDIS_HOST as string,
+    port: Number.parseInt(process.env.REDIS_PORT as string),
+    password: process.env.REDIS_PASSWORD as string
+}, { redisKeyPrefix: 'myWorqr' });
+const worqr2 = new Worqr({
+    host: process.env.REDIS_HOST as string,
+    port: Number.parseInt(process.env.REDIS_PORT as string),
+    password: process.env.REDIS_PASSWORD as string
+}, { redisKeyPrefix: 'myWorqr' });
+const worqr3 = new Worqr({
+    host: process.env.REDIS_HOST as string,
+    port: Number.parseInt(process.env.REDIS_PORT as string),
+    password: process.env.REDIS_PASSWORD as string
+}, { redisKeyPrefix: 'myWorqr' });
 
 const queueName = 'myQueue';
 
