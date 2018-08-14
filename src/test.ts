@@ -128,15 +128,17 @@ describe('Worqr', function () {
             .catch(done);
     });
 
-    it('should listen for work on the first queue, enqueue a task, and get a work event', done => {
-        const listener = (event: QueueEvent) => {
+    it('should subscribe to the first queue, enqueue a task, and get a work event', done => {
+        function listener(event: QueueEvent) {
             expect(event.type).to.equal('work');
             worqr.removeListener('queue1', listener);
             done();
-        };
+        }
 
         worqr.addListener('queue1', listener);
-        worqr.enqueue('queue1', 'task4');
+
+        worqr.enqueue('queue1', 'task4')
+            .catch(done);
     });
 
     it('should finish three tasks on the first queue', done => {
@@ -178,9 +180,41 @@ describe('Worqr', function () {
             .catch(done);
     });
 
-    it('should stop work on the first queue', done => {
-        worqr.stopWork('queue1')
-            .then(() => done())
+    it('should subscribe to the first queue, enqueue a task, cancel the task, receive a cancel event, and stop the process', done => {
+        function listener(event: QueueEvent) {
+            if (event.type === 'cancel') {
+                worqr.stopProcess(event.message)
+                    .then(() => {
+                        worqr.removeListener('queue1', listener);
+                        done();
+                    })
+                    .catch(done);
+            }
+        }
+
+        worqr.addListener('queue1', listener);
+
+        Promise.resolve()
+            .then(() => worqr.enqueue('queue1', 'task1'))
+            .then(() => worqr.cancelTasks('queue1', 'task1'))
+            .catch(done);
+    });
+
+    it('should subscribe to the first queue, delete the queue, and receive a delete event, and stop work on the queue', done => {
+        function listener(event: QueueEvent) {
+            if (event.type === 'delete') {
+                worqr.stopWork('queue1')
+                    .then(() => {
+                        worqr.removeListener('queue1', listener);
+                        done();
+                    })
+                    .catch(done);
+            }
+        }
+
+        worqr.addListener('queue1', listener);
+
+        worqr.deleteQueue('queue1')
             .catch(done);
     });
 
@@ -190,9 +224,8 @@ describe('Worqr', function () {
             .catch(done);
     });
 
-    it('should delete the three queues', done => {
+    it('should delete the other two queues', done => {
         Promise.all([
-            worqr.deleteQueue('queue1'),
             worqr.deleteQueue('queue2'),
             worqr.deleteQueue('queue3')
         ])
