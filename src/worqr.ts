@@ -123,7 +123,7 @@ export class Worqr extends EventEmitter {
      */
     public peekQueue(queueName: string): Promise<string> {
         return new Promise((resolve, reject) => {
-            this.pub.lindex(`${this.queues}:${queueName}`, 0, (err, task) => {
+            this.pub.lindex(`${this.queues}:${queueName}`, -1, (err, task) => {
                 if (err) return reject(err);
                 resolve(task);
             });
@@ -138,6 +138,18 @@ export class Worqr extends EventEmitter {
             this.pub.llen(`${this.queues}:${queueName}`, (err, len) => {
                 if (err) return reject(err);
                 resolve(len);
+            });
+        });
+    }
+
+    /**
+     * Returns all the tasks in a queue.
+     */
+    public getQueueTasks(queueName: string): Promise<string[]> {
+        return new Promise((resolve, reject) => {
+            this.pub.lrange(`${this.queues}:${queueName}`, 0, -1, (err, tasks) => {
+                if (err) return reject(err);
+                resolve(tasks);
             });
         });
     }
@@ -254,8 +266,7 @@ export class Worqr extends EventEmitter {
         log(`stopping process ${processName}`);
 
         return new Promise((resolve, reject) => {
-            const lastUnderscore = processName.lastIndexOf('_');
-            const queueName = processName.substr(0, lastUnderscore);
+            const queueName = processName.substr(0, processName.lastIndexOf('_'));
 
             this.pub.multi()
                 .rpoplpush(`${this.processes}:${processName}`, `${this.queues}:${queueName}`)
@@ -274,8 +285,7 @@ export class Worqr extends EventEmitter {
         log(`finishing process ${processName}`);
 
         return new Promise((resolve, reject) => {
-            const lastUnderscore = processName.lastIndexOf('_');
-            const queueName = processName.substr(0, lastUnderscore);
+            const queueName = processName.substr(0, processName.lastIndexOf('_'));
 
             this.pub.multi()
                 .del(`${this.processes}:${processName}`)
@@ -509,8 +519,7 @@ export class Worqr extends EventEmitter {
                     });
 
                     processNames.forEach(processName => {
-                        const lastUnderscore = processName.lastIndexOf('_');
-                        const queueName = processName.substr(0, lastUnderscore);
+                        const queueName = processName.substr(0, processName.lastIndexOf('_'));
 
                         multi = multi
                             .rpoplpush(`${this.processes}:${processName}`, `${this.queues}:${queueName}`)
