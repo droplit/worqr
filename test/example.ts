@@ -1,4 +1,4 @@
-import { Worqr, QueueEvent } from './';
+import { Worqr, QueueEvent } from '../src';
 
 const log = require('debug')('worqr:client');
 

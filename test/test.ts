@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 
-import { Worqr, QueueEvent } from './';
+import { Worqr, QueueEvent } from '../src';
 
 let worqr: Worqr;
 let processName: string;
