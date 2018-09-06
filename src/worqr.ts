@@ -36,6 +36,8 @@ export class Worqr extends EventEmitter {
     private queues: string;
     private processes: string;
     private workers: string;
+    private expiringWorkers: string;
+    private permanentWorkers: string;
     private workerTimers: string;
     private workingQueues: string;
     private workingProcesses: string;
@@ -56,6 +58,8 @@ export class Worqr extends EventEmitter {
         this.queues = `${this.redisKeyPrefix}:queues`;
         this.processes = `${this.redisKeyPrefix}:processes`;
         this.workers = `${this.redisKeyPrefix}:workers`;
+        this.expiringWorkers = `${this.redisKeyPrefix}:expiringWorkers`;
+        this.permanentWorkers = `${this.redisKeyPrefix}:permanentWorkers`;
         this.workerTimers = `${this.redisKeyPrefix}:workerTimers`;
         this.workingQueues = `${this.redisKeyPrefix}:workingQueues`;
         this.workingProcesses = `${this.redisKeyPrefix}:workingProcesses`;
@@ -119,7 +123,7 @@ export class Worqr extends EventEmitter {
     }
 
     /**
-     * Returns the next task on a queue.
+     * Returns the next task in a queue.
      */
     public peekQueue(queueName: string): Promise<string> {
         return new Promise((resolve, reject) => {
@@ -155,7 +159,19 @@ export class Worqr extends EventEmitter {
     }
 
     /**
-     * Deletes a queue, emitting and event with `type: 'delete'`.
+     * Returns a list of all processes running on a queue.
+     */
+    public getWorkingProcesses(queueName: string): Promise<string[]> {
+        return new Promise((resolve, reject) => {
+            this.pub.smembers(`${this.workingProcesses}:${queueName}`, (err, processNames) => {
+                if (err) return reject(err);
+                resolve(processNames);
+            });
+        });
+    }
+
+    /**
+     * Deletes a queue, emitting an event with `type: 'delete'`.
      * Clients should listen for this event and stop work on the queue.
      */
     public deleteQueue(queueName: string): Promise<void> {
@@ -302,7 +318,7 @@ export class Worqr extends EventEmitter {
      * Clients should listen for this event and stop all processes matching the task.
      */
     public cancelTasks(queueName: string, task: string): Promise<void> {
-        log(`canceling tasks ${task}`);
+        log(`canceling ${task} on ${queueName}`);
 
         return new Promise((resolve, reject) => {
             this.pub.multi()
@@ -333,18 +349,26 @@ export class Worqr extends EventEmitter {
         log(`starting worker ${this.workerId}`);
 
         return new Promise((resolve, reject) => {
-            this.pub.multi()
-                .sadd(this.workers, this.workerId)
-                .set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout)
-                .exec(err => {
-                    if (err) return reject(err);
+            const multi = this.pub.multi()
+                .sadd(this.workers, this.workerId);
 
-                    this.workerTimerInterval = setInterval(() => {
-                        this.keepWorkerAlive();
-                    }, this.workerHeartbeatInterval);
+            if (this.workerTimeout < 0) {
+                multi.sadd(this.permanentWorkers, this.workerId);
+            } else {
+                multi
+                    .sadd(this.expiringWorkers, this.workerId)
+                    .set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout);
+            }
 
-                    resolve();
-                });
+            multi.exec(err => {
+                if (err) return reject(err);
+
+                this.workerTimerInterval = setInterval(() => {
+                    this.keepWorkerAlive();
+                }, this.workerHeartbeatInterval);
+
+                resolve();
+            });
         });
     }
 
@@ -353,6 +377,9 @@ export class Worqr extends EventEmitter {
      */
     public keepWorkerAlive(): Promise<void> {
         return new Promise((resolve, reject) => {
+            if (this.workerTimeout < 0)
+                return resolve();
+
             this.pub.set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout, 'XX', (err, success) => {
                 if (err) return reject(err);
                 if (!success) return this.failWorker(this.workerId);
@@ -426,22 +453,6 @@ export class Worqr extends EventEmitter {
 
     // #endregion
 
-    // #region Working Processes
-
-    /**
-     * Returns a list of all processes running on a queue.
-     */
-    public getWorkingProcesses(queueName: string): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.pub.smembers(`${this.workingProcesses}:${queueName}`, (err, processNames) => {
-                if (err) return reject(err);
-                resolve(processNames);
-            });
-        });
-    }
-
-    // #endregion
-
     // #region Workers
 
     /**
@@ -450,6 +461,30 @@ export class Worqr extends EventEmitter {
     public getWorkers(): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.pub.smembers(this.workers, (err, workerNames) => {
+                if (err) return reject(err);
+                resolve(workerNames);
+            });
+        });
+    }
+
+    /**
+     * Returns a list of all expiring workers.
+     */
+    public getExpiringWorkers(): Promise<string[]> {
+        return new Promise((resolve, reject) => {
+            this.pub.smembers(this.expiringWorkers, (err, workerNames) => {
+                if (err) return reject(err);
+                resolve(workerNames);
+            });
+        });
+    }
+
+    /**
+     * Returns a list of all permanent workers.
+     */
+    public getPermanentWorkers(): Promise<string[]> {
+        return new Promise((resolve, reject) => {
+            this.pub.smembers(this.permanentWorkers, (err, workerNames) => {
                 if (err) return reject(err);
                 resolve(workerNames);
             });
@@ -510,6 +545,8 @@ export class Worqr extends EventEmitter {
                 .then(({ queueNames, processNames }) => {
                     let multi = this.pub.multi()
                         .srem(this.workers, workerName as string)
+                        .srem(this.expiringWorkers, workerName as string)
+                        .srem(this.permanentWorkers, workerName as string)
                         .del(`${this.workerTimers}:${workerName}`)
                         .del(`${this.workingQueues}:${workerName}`);
 
@@ -563,7 +600,7 @@ export class Worqr extends EventEmitter {
             }
 
             Promise.resolve()
-                .then(() => this.getWorkers())
+                .then(() => this.getExpiringWorkers())
                 .then(workerNames => Promise.all(workerNames.map(workerName => new Promise<WorkerStatus>((resolve, reject) => {
                     this.pub.keys(`${this.workerTimers}:${workerName}`, (err, workerTimers) => {
                         if (err) return reject(err);

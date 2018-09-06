@@ -7,12 +7,12 @@ A distributed, reliable, job queueing system that uses redis as a backend.
 Requirements:
 
 - Only Redis is required as a back-end server. No server components to install. Operates purely peer-to-peer in your application.
-- Every transaction is fully atomic (queue never left in inconsistent state)
-- When workers fail, all tasks are put back into the queue at the front
-- Queue doesn't keep any item history
-- As a work queue, each item is only delivered to exactly one worker
-- work items are not enveloped, so there is no encoding/decoding overhead or chance for the format to change in future releases.
-- uses pub/sub for new work notifications
+- Every transaction is fully atomic (queue never left in inconsistent state).
+- When workers fail, all tasks are put back into the queue at the front.
+- Queue doesn't keep any item history.
+- As a work queue, each item is only delivered to exactly one worker.
+- Work items are not enveloped, so there is no encoding/decoding overhead or chance for the format to change in future releases.
+- Uses pub/sub for new work notifications.
 
 ## Theory of Operation
 
@@ -30,7 +30,7 @@ The primary unit of work to be done is a **Task**. Tasks are organized into **Qu
 
 ### Enqueue
 
-Add a **Task** to a **Queue**.
+Add a task to a queue.
 
 In the diagram, the queue name is `Q1` and the task payload is `T1`.
 
@@ -51,9 +51,9 @@ T1 +--> | |T1  | |T0  |        |
 
 ### Start Task
 
-Move a **Task** from a "to do" list to a "doing" list.
+Move a task from a "to do" list to a "doing" list.
 
-In the diagram, `W1` refers to the worker.
+In the diagram, the worker is `W1` and the process is `P1`.
 
 ```
 startTask (Q1, W1, P1)
@@ -72,7 +72,7 @@ startTask (Q1, W1, P1)
 
 ### Stop Task
 
-Removes a **Task** from a **Worker**'s personal "to do" list.
+Removes a task from a worker's personal "to do" list.
 
 ```
 stopTask (P1)
@@ -91,7 +91,7 @@ stopTask (P1)
 
 ### Finish Task
 
-Moves a **Task** from a **Worker**'s list into a top level "to do" list.
+Moves a task from a worker's list into a top level "to do" list.
 
 ```
 finishTask (P1)
@@ -110,7 +110,9 @@ finishTask (P1)
 
 ### Cancel Tasks
 
-Workers listen on Q1* and "finish" all tasks that are cancelled.
+Removes a task from a queue.
+
+Workers listen on `Q1` and "finish" all tasks that are cancelled.
 
 ```
 cancelTasks (Q1, T1)
@@ -129,7 +131,7 @@ cancelTasks (Q1, T1)
 
 ### Start Worker
 
-Register **Worker** as existing and available for work.
+Register a worker as existing and available for work.
 
 ```
 startWorker (W1)
@@ -148,32 +150,20 @@ startWorker (W1)
 
 ### Keep Worker Alive
 
+Digest cycle.
+
 ```
 keepWorkerAlive (W1)
 
- 1) SET W1 RUN EX 3 XX  (XX = set if exists)
+Every 1 second
+        SET W1 RUN EX 3 XX  (XX = set if exists)
 
     If SET fails, worker has failed to stay alive and must restart
 ```
 
-```
-Every 1 second
-        SETEX Worker1, 3
-```
-
-Check if Worker is alive
-
-```
-SMEMBERS RegisteredWorkers
-MGET <list of registered workers>
-For each Worker in RegisteredWorkers
-        if Worker == NIL
-        for each member in WorkerQueueDoing list requeueTask
-```
-
 ### Start Work
 
-Subscribe to Task event queue and start work. Keeps track of which queues each worker services.
+Subscribe to task event queue and start work, keeping track of which queues each worker services.
 
 ```
 startWork (W1, Q1)
@@ -191,7 +181,7 @@ startWork (W1, Q1)
 
 ### Stop Work
 
-Unsubscribe from new **Task** event queue. Assume anything remaining should return to todo.
+Unsubscribe from new task event queue. In-progress work is returned to the queue.
 
 ```
 stopWork (W1, Q1)
@@ -210,7 +200,7 @@ stopWork (W1, Q1)
 
 ### Fail Worker
 
-Stop all tasks.
+Stop all work and delete the worker. In-progress work is returned to the queue.
 
 ```
 failWorker (W1)
@@ -265,14 +255,6 @@ npm install
 
 Create `.env` file and input environment variables. See `.example.env for reference`.
 
-### Build
-
-Build and transpile TS
-
-```
-npm run build
-```
-
 ### Lint code
 
 ```
@@ -291,4 +273,12 @@ Example script to test functionality
 
 ```
 npm run example
+```
+
+### Build
+
+Build and transpile TS
+
+```
+npm run build
 ```
