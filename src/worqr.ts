@@ -5,6 +5,27 @@ import * as uuid from 'uuid';
 const log = require('debug')('worqr');
 
 /**
+ * Options for Redis connection.
+ */
+export interface RedisOptions {
+    host: string;
+    port: number;
+    password: string;
+}
+
+/**
+ * Options for the Worqr instance.
+ */
+export interface WorqrOptions {
+    redisKeyPrefix?: string;
+    instanceId?: string;
+    workerHeartbeatInterval?: number;
+    workerTimeout?: number;
+    workerCleanupInterval?: number;
+    digestBiteSize?: number;
+}
+
+/**
  * Represents a process started by a worker.
  */
 export interface Process {
@@ -45,7 +66,7 @@ export class Worqr extends EventEmitter {
     /**
      * Creates a Worqr instance.
      */
-    public constructor(redisOptions: { host: string, port: number, password: string }, worqrOptions?: { redisKeyPrefix?: string, instanceId?: string, workerHeartbeatInterval?: number, workerTimeout?: number, workerCleanupInterval?: number, digestBiteSize?: number }) {
+    public constructor(redisOptions: RedisOptions, worqrOptions?: WorqrOptions) {
         super();
         this.pub = redis.createClient(redisOptions);
         this.sub = redis.createClient(redisOptions);
@@ -377,7 +398,7 @@ export class Worqr extends EventEmitter {
      */
     public keepWorkerAlive(): Promise<void> {
         return new Promise((resolve, reject) => {
-            if (this.workerTimeout < 0)
+            if (this.workerTimeout <= 0)
                 return resolve();
 
             this.pub.set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout, 'XX', (err, success) => {
