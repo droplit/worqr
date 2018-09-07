@@ -1,6 +1,7 @@
 import { expect } from 'chai';
 
-import { Worqr, QueueEvent } from '../src';
+import { Worqr } from '../src';
+import { QueueEvent } from '../src/types';
 
 let worqr: Worqr;
 let processName: string;

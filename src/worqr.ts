@@ -2,44 +2,9 @@ import { EventEmitter } from 'events';
 import * as redis from 'redis';
 import * as uuid from 'uuid';
 
+import { RedisOptions, WorqrOptions, Process, QueueEvent, QueueEventType } from './types';
+
 const log = require('debug')('worqr');
-
-/**
- * Options for Redis connection.
- */
-export interface RedisOptions {
-    host: string;
-    port: number;
-    password: string;
-}
-
-/**
- * Options for the Worqr instance.
- */
-export interface WorqrOptions {
-    redisKeyPrefix?: string;
-    instanceId?: string;
-    workerHeartbeatInterval?: number;
-    workerTimeout?: number;
-    workerCleanupInterval?: number;
-    digestBiteSize?: number;
-}
-
-/**
- * Represents a process started by a worker.
- */
-export interface Process {
-    processName: string;
-    task: string;
-}
-
-/**
- * Event emitted by a queue.
- */
-export interface QueueEvent {
-    type: 'work' | 'cancel' | 'delete';
-    message: string;
-}
 
 /**
  * A distributed, reliable, job queueing system that uses redis as a backend.
@@ -89,9 +54,11 @@ export class Worqr extends EventEmitter {
             const unprefixedChannel = channel.substr(channel.indexOf('_') + 1);
             const lastUnderscore = unprefixedChannel.lastIndexOf('_');
             const queueName = unprefixedChannel.substr(0, lastUnderscore);
-            const type = unprefixedChannel.substr(lastUnderscore + 1);
+            const type = unprefixedChannel.substr(lastUnderscore + 1) as QueueEventType;
 
-            this.emit(queueName, { type, message });
+            const queueEvent: QueueEvent = { type, message };
+
+            this.emit(queueName, queueEvent);
         });
 
         setInterval(() => {
