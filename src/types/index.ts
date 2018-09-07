@@ -23,7 +23,7 @@ export interface WorqrOptions {
  * Represents a process started by a worker.
  */
 export interface Process {
-    processName: string;
+    id: string;
     task: string;
 }
 

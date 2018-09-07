@@ -71,7 +71,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns a list of all queues.
      */
-    public getQueueNames(): Promise<string[]> {
+    public listQueues(): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.pub.keys(`${this.queues}*`, (err, queueNames) => {
                 if (err) return reject(err);
@@ -81,31 +81,13 @@ export class Worqr extends EventEmitter {
     }
 
     /**
-     * Enqueues a task on a queue, emitting an event with `type: 'work'`.
-     * Clients should listen for this event and start tasks on the queue.
+     * Returns a list of queues a worker is working on.
      */
-    public enqueue(queueName: string, task: string | string[]): Promise<void> {
-        log(`queueing ${task.toString()} to ${queueName}`);
-
+    private listWorkingQueues(workerName: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.pub.multi()
-                .lpush(`${this.queues}:${queueName}`, task)
-                .publish(`${this.redisKeyPrefix}_${queueName}_work`, '1')
-                .exec(err => {
-                    if (err) return reject(err);
-                    resolve();
-                });
-        });
-    }
-
-    /**
-     * Returns whether there is a queue with this name.
-     */
-    public isQueue(queueName: string): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            this.pub.exists(`${this.queues}:${queueName}`, (err, exists) => {
+            this.pub.smembers(`${this.workingQueues}:${workerName}`, (err, queueNames) => {
                 if (err) return reject(err);
-                resolve(exists === 1);
+                resolve(queueNames);
             });
         });
     }
@@ -125,35 +107,11 @@ export class Worqr extends EventEmitter {
     /**
      * Returns the number of tasks in a queue.
      */
-    public getQueueCount(queueName: string): Promise<number> {
+    public countQueue(queueName: string): Promise<number> {
         return new Promise((resolve, reject) => {
             this.pub.llen(`${this.queues}:${queueName}`, (err, len) => {
                 if (err) return reject(err);
                 resolve(len);
-            });
-        });
-    }
-
-    /**
-     * Returns all the tasks in a queue.
-     */
-    public getQueueTasks(queueName: string): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.pub.lrange(`${this.queues}:${queueName}`, 0, -1, (err, tasks) => {
-                if (err) return reject(err);
-                resolve(tasks);
-            });
-        });
-    }
-
-    /**
-     * Returns a list of all processes running on a queue.
-     */
-    public getWorkingProcesses(queueName: string): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.pub.smembers(`${this.workingProcesses}:${queueName}`, (err, processNames) => {
-                if (err) return reject(err);
-                resolve(processNames);
             });
         });
     }
@@ -181,53 +139,31 @@ export class Worqr extends EventEmitter {
     // #region Tasks
 
     /**
-     * Dequeues a task from the queue, returning a process.
-     * The worker must have started work on the queue in order to get tasks.
-     * Process will be null if the queue is empty.
+     * Enqueues a task on a queue, emitting an event with `type: 'work'`.
+     * Clients should listen for this event and start tasks on the queue.
      */
-    public startTask(queueName: string): Promise<Process | null> {
-        log(`${this.workerId} starting task on ${queueName}`);
+    public enqueue(queueName: string, task: string | string[]): Promise<void> {
+        log(`queueing ${task.toString()} to ${queueName}`);
 
         return new Promise((resolve, reject) => {
-            Promise.resolve()
-                .then(() => this.isWorking(this.workerId, queueName))
-                .then(isWorking => new Promise<Process>((resolve, reject) => {
-                    if (!isWorking) return reject(`${this.workerId} is not working on ${queueName}`);
-
-                    const processName = `${queueName}_${uuid.v4()}`;
-
-                    this.pub.multi()
-                        .rpoplpush(`${this.queues}:${queueName}`, `${this.processes}:${processName}`)
-                        .sadd(`${this.workingProcesses}:${queueName}`, processName)
-                        .exec((err, [task]) => {
-                            if (err) return reject(err);
-                            resolve({ processName, task });
-                        });
-                }))
-                .then(process => {
-                    const { processName, task } = process;
-
-                    if (!task) {
-                        this.pub.srem(`${this.workingProcesses}:${queueName}`, processName, err => {
-                            if (err) return reject(err);
-                            resolve(null);
-                        });
-                    } else {
-                        resolve(process);
-                    }
-                })
-                .catch(err => reject(err));
+            this.pub.multi()
+                .lpush(`${this.queues}:${queueName}`, task)
+                .publish(`${this.redisKeyPrefix}_${queueName}_work`, '1')
+                .exec(err => {
+                    if (err) return reject(err);
+                    resolve();
+                });
         });
     }
 
     /**
-     * Returns a list of all processes running.
+     * Returns all the tasks in a queue.
      */
-    public getProcesses(): Promise<string[]> {
+    public listTasks(queueName: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.pub.keys(`${this.processes}*`, (err, processNames) => {
+            this.pub.lrange(`${this.queues}:${queueName}`, 0, -1, (err, tasks) => {
                 if (err) return reject(err);
-                resolve(processNames.map(processName => processName.split(':')[2]));
+                resolve(tasks);
             });
         });
     }
@@ -235,69 +171,12 @@ export class Worqr extends EventEmitter {
     /**
      * Returns the task for a given process.
      */
-    public getTask(processName: string): Promise<string> {
+    private getTask(processId: string): Promise<string> {
         return new Promise((resolve, reject) => {
-            this.pub.lindex(`${this.processes}:${processName}`, 0, (err, task) => {
+            this.pub.lindex(`${this.processes}:${processId}`, 0, (err, task) => {
                 if (err) return reject(err);
                 resolve(task);
             });
-        });
-    }
-
-    /**
-     * Returns a list of processes for tasks matching the given task.
-     */
-    public getMatchingProcesses(task: string): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            const processNamesForTask: string[] = [];
-
-            Promise.resolve()
-                .then(() => this.getProcesses())
-                .then(processNames => Promise.all(processNames.map(processName => this.getTask(processName).then(t => {
-                    if (t === task) {
-                        processNamesForTask.push(processName);
-                    }
-                }))))
-                .then(() => resolve(processNamesForTask))
-                .catch(err => reject(err));
-        });
-    }
-
-    /**
-     * Stops a process, returning its task to the queue it came from.
-     */
-    public stopProcess(processName: string): Promise<void> {
-        log(`stopping process ${processName}`);
-
-        return new Promise((resolve, reject) => {
-            const queueName = processName.substr(0, processName.lastIndexOf('_'));
-
-            this.pub.multi()
-                .rpoplpush(`${this.processes}:${processName}`, `${this.queues}:${queueName}`)
-                .srem(`${this.workingProcesses}:${queueName}`, processName)
-                .exec(err => {
-                    if (err) return reject(err);
-                    resolve();
-                });
-        });
-    }
-
-    /**
-     * Stops a process, removing the task entirely.
-     */
-    public finishProcess(processName: string): Promise<void> {
-        log(`finishing process ${processName}`);
-
-        return new Promise((resolve, reject) => {
-            const queueName = processName.substr(0, processName.lastIndexOf('_'));
-
-            this.pub.multi()
-                .del(`${this.processes}:${processName}`)
-                .srem(`${this.workingProcesses}:${queueName}`, processName)
-                .exec(err => {
-                    if (err) return reject(err);
-                    resolve();
-                });
         });
     }
 
@@ -312,6 +191,129 @@ export class Worqr extends EventEmitter {
             this.pub.multi()
                 .lrem(`${this.queues}:${queueName}`, 0, task)
                 .publish(`${this.redisKeyPrefix}_${queueName}_cancel`, task)
+                .exec(err => {
+                    if (err) return reject(err);
+                    resolve();
+                });
+        });
+    }
+
+    // #endregion
+
+    // #region Processes
+
+    /**
+     * Dequeues a task from the queue, returning a process.
+     * The worker must have started work on the queue in order to get tasks.
+     * Process will be null if the queue is empty.
+     */
+    public dequeue(queueName: string): Promise<Process | null> {
+        log(`${this.workerId} starting task on ${queueName}`);
+
+        return new Promise((resolve, reject) => {
+            Promise.resolve()
+                .then(() => this.isWorking(this.workerId, queueName))
+                .then(isWorking => new Promise<Process>((resolve, reject) => {
+                    if (!isWorking) return reject(`${this.workerId} is not working on ${queueName}`);
+
+                    const processId = `${queueName}_${uuid.v4()}`;
+
+                    this.pub.multi()
+                        .rpoplpush(`${this.queues}:${queueName}`, `${this.processes}:${processId}`)
+                        .sadd(`${this.workingProcesses}:${queueName}`, processId)
+                        .exec((err, [task]) => {
+                            if (err) return reject(err);
+                            resolve({ id: processId, task });
+                        });
+                }))
+                .then(process => {
+                    if (!process.task) {
+                        this.pub.srem(`${this.workingProcesses}:${queueName}`, process.id, err => {
+                            if (err) return reject(err);
+                            resolve(null);
+                        });
+                    } else {
+                        resolve(process);
+                    }
+                })
+                .catch(err => reject(err));
+        });
+    }
+
+    /**
+     * Returns a list of all processes running.
+     */
+    private listProcesses(): Promise<string[]> {
+        return new Promise((resolve, reject) => {
+            this.pub.keys(`${this.processes}*`, (err, processIds) => {
+                if (err) return reject(err);
+                resolve(processIds.map(processId => processId.split(':')[2]));
+            });
+        });
+    }
+
+    /**
+     * Returns a list of processes for tasks matching the given task.
+     */
+    public listMatchingProcesses(task: string): Promise<string[]> {
+        return new Promise((resolve, reject) => {
+            const processIdsForTask: string[] = [];
+
+            Promise.resolve()
+                .then(() => this.listProcesses())
+                .then(processIds => Promise.all(processIds.map(processId => this.getTask(processId).then(t => {
+                    if (t === task) {
+                        processIdsForTask.push(processId);
+                    }
+                }))))
+                .then(() => resolve(processIdsForTask))
+                .catch(err => reject(err));
+        });
+    }
+
+    /**
+     * Returns a list of all processes running on a queue.
+     */
+    private listWorkingProcesses(queueName: string): Promise<string[]> {
+        return new Promise((resolve, reject) => {
+            this.pub.smembers(`${this.workingProcesses}:${queueName}`, (err, processIds) => {
+                if (err) return reject(err);
+                resolve(processIds);
+            });
+        });
+    }
+
+    /**
+     * Stops a process, returning its task to the queue it came from.
+     */
+    public stopProcess(processId: string): Promise<void> {
+        log(`stopping process ${processId}`);
+
+        return new Promise((resolve, reject) => {
+            const queueName = processId.substr(0, processId.lastIndexOf('_'));
+
+            this.pub.multi()
+                .rpoplpush(`${this.processes}:${processId}`, `${this.queues}:${queueName}`)
+                .srem(`${this.workingProcesses}:${queueName}`, processId)
+                .exec(err => {
+                    if (err) return reject(err);
+                    resolve();
+                });
+        });
+    }
+
+    /**
+     * Stops a process, removing the task entirely.
+     */
+    public finishProcess(processId: string): Promise<void> {
+        log(`finishing process ${processId}`);
+
+        return new Promise((resolve, reject) => {
+            const queueName = processId.substr(0, processId.lastIndexOf('_'));
+
+            this.pub.multi()
+                .del(`${this.processes}:${processId}`)
+                .srem(`${this.workingProcesses}:${queueName}`, processId)
                 .exec(err => {
                     if (err) return reject(err);
                     resolve();
@@ -361,22 +363,6 @@ export class Worqr extends EventEmitter {
     }
 
     /**
-     * Refreshes this worker's timer, indicating it is still active.
-     */
-    public keepWorkerAlive(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            if (this.workerTimeout <= 0)
-                return resolve();
-
-            this.pub.set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout, 'XX', (err, success) => {
-                if (err) return reject(err);
-                if (!success) return this.failWorker(this.workerId);
-                resolve();
-            });
-        });
-    }
-
-    /**
      * Starts work on a queue.
      * The worker will start emitting events for the queue, which clients should subscribe to.
      */
@@ -393,8 +379,8 @@ export class Worqr extends EventEmitter {
                     this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
                     this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
 
-                    this.isQueue(queueName).then(isQueue => {
-                        if (isQueue) {
+                    this.peekQueue(queueName).then(task => {
+                        if (task) {
                             this.pub.publish(`${this.redisKeyPrefix}_${queueName}_work`, '1');
                         }
                     });
@@ -413,16 +399,16 @@ export class Worqr extends EventEmitter {
 
         return new Promise((resolve, reject) => {
             Promise.resolve()
-                .then(() => this.getWorkingProcesses(queueName))
-                .then(processNames => {
+                .then(() => this.listWorkingProcesses(queueName))
+                .then(processIds => {
                     let multi = this.pub.multi()
                         .srem(`${this.workingQueues}:${this.workerId}`, queueName)
                         .del(`${this.workingProcesses}:${queueName}`);
 
-                    processNames.forEach(processName => {
+                    processIds.forEach(processId => {
                         multi = multi
-                            .rpoplpush(`${this.processes}:${processName}`, `${this.queues}:${queueName}`)
-                            .del(`${this.processes}:${processName}`);
+                            .rpoplpush(`${this.processes}:${processId}`, `${this.queues}:${queueName}`)
+                            .del(`${this.processes}:${processId}`);
                     });
 
                     multi.exec(err => {
@@ -439,6 +425,22 @@ export class Worqr extends EventEmitter {
         });
     }
 
+    /**
+     * Refreshes this worker's timer, indicating it is still active.
+     */
+    private keepWorkerAlive(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (this.workerTimeout <= 0)
+                return resolve();
+
+            this.pub.set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout, 'XX', (err, success) => {
+                if (err) return reject(err);
+                if (!success) return this.failWorker(this.workerId);
+                resolve();
+            });
+        });
+    }
+
     // #endregion
 
     // #region Workers
@@ -446,33 +448,9 @@ export class Worqr extends EventEmitter {
     /**
      * Returns a list of all workers.
      */
-    public getWorkers(): Promise<string[]> {
+    public listWorkers(): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.pub.smembers(this.workers, (err, workerNames) => {
-                if (err) return reject(err);
-                resolve(workerNames);
-            });
-        });
-    }
-
-    /**
-     * Returns a list of all expiring workers.
-     */
-    public getExpiringWorkers(): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.pub.smembers(this.expiringWorkers, (err, workerNames) => {
-                if (err) return reject(err);
-                resolve(workerNames);
-            });
-        });
-    }
-
-    /**
-     * Returns a list of all permanent workers.
-     */
-    public getPermanentWorkers(): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.pub.smembers(this.permanentWorkers, (err, workerNames) => {
                 if (err) return reject(err);
                 resolve(workerNames);
             });
@@ -492,18 +470,6 @@ export class Worqr extends EventEmitter {
     }
 
     /**
-     * Returns a list of all queues a worker is working on.
-     */
-    public getWorkingQueues(workerName: string): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.pub.smembers(`${this.workingQueues}:${workerName}`, (err, queueNames) => {
-                if (err) return reject(err);
-                resolve(queueNames);
-            });
-        });
-    }
-
-    /**
      * Fails a worker, putting all its tasks back on the queues they came from.
      */
     public failWorker(workerName?: string): Promise<void> {
@@ -517,20 +483,20 @@ export class Worqr extends EventEmitter {
              */
             interface WorkerItems {
                 queueNames: string[];
-                processNames: string[];
+                processIds: string[];
             }
 
             Promise.resolve()
-                .then(() => this.getWorkingQueues(workerName as string))
+                .then(() => this.listWorkingQueues(workerName as string))
                 .then(queueNames => new Promise<WorkerItems>((resolve, reject) => {
-                    const processNames: string[] = [];
+                    const processIds: string[] = [];
 
-                    Promise.all(queueNames.map(queueName => this.getWorkingProcesses(queueName)))
-                        .then(processNames2d => processNames2d.forEach(processNames1d => processNames.push(...processNames1d)))
-                        .then(() => resolve({ queueNames, processNames }))
+                    Promise.all(queueNames.map(queueName => this.listWorkingProcesses(queueName)))
+                        .then(processIds2d => processIds2d.forEach(processIds1d => processIds.push(...processIds1d)))
+                        .then(() => resolve({ queueNames, processIds }))
                         .catch(err => reject(err));
                 }))
-                .then(({ queueNames, processNames }) => {
+                .then(({ queueNames, processIds }) => {
                     let multi = this.pub.multi()
                         .srem(this.workers, workerName as string)
                         .srem(this.expiringWorkers, workerName as string)
@@ -543,12 +509,12 @@ export class Worqr extends EventEmitter {
                             .del(`${this.workingProcesses}:${queueName}`);
                     });
 
-                    processNames.forEach(processName => {
-                        const queueName = processName.substr(0, processName.lastIndexOf('_'));
+                    processIds.forEach(processId => {
+                        const queueName = processId.substr(0, processId.lastIndexOf('_'));
 
                         multi = multi
-                            .rpoplpush(`${this.processes}:${processName}`, `${this.queues}:${queueName}`)
-                            .del(`${this.processes}:${processName}`);
+                            .rpoplpush(`${this.processes}:${processId}`, `${this.queues}:${queueName}`)
+                            .del(`${this.processes}:${processId}`);
                     });
 
                     multi.exec(err => {
@@ -574,10 +540,22 @@ export class Worqr extends EventEmitter {
     }
 
     /**
+     * Returns a list of all expiring workers.
+     */
+    private getExpiringWorkers(): Promise<string[]> {
+        return new Promise((resolve, reject) => {
+            this.pub.smembers(this.expiringWorkers, (err, workerNames) => {
+                if (err) return reject(err);
+                resolve(workerNames);
+            });
+        });
+    }
+
+    /**
      * Fails all workers that have timed out.
      * This is run every `workerCleanupInterval` milliseconds.
      */
-    public cleanupWorkers(): Promise<void> {
+    private cleanupWorkers(): Promise<void> {
         return new Promise((resolve, reject) => {
             /**
              * Represents whether a worker is dead.

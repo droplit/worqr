@@ -22,6 +22,8 @@ The primary unit of work to be done is a **Task**. Tasks are organized into **Qu
 
 **Task** - something a worker consumes.
 
+**Process** - a task that is being worked on.
+
 **Worker** - a distributed agent that consumes tasks.
 
 **Queue** - a first in, first out list of Tasks.
