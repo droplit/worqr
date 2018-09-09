@@ -63,9 +63,9 @@ describe('Worqr', function () {
 
     it('should list all workers', done => {
         worqr.getWorkers()
-            .then(workerNames => {
-                expect(workerNames).to.have.lengthOf(1);
-                expect(workerNames).to.include(worqr.getWorkerId());
+            .then(workerIds => {
+                expect(workerIds).to.have.lengthOf(1);
+                expect(workerIds).to.include(worqr.getWorkerId());
                 done();
             })
             .catch(done);
