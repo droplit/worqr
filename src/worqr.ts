@@ -7,6 +7,22 @@ import { RedisOptions, WorqrOptions, Process, QueueEvent, QueueEventType } from 
 const log = require('debug')('worqr');
 
 /**
+ * Represents queues and processes that this worker is working on.
+ */
+interface WorkerItems {
+    queueNames: string[];
+    processIds: string[];
+}
+
+/**
+ * Represents whether a worker is dead.
+ */
+interface WorkerStatus {
+    workerId: string;
+    dead: boolean;
+}
+
+/**
  * A distributed, reliable, job queueing system that uses redis as a backend.
  */
 export class Worqr extends EventEmitter {
@@ -478,14 +494,6 @@ export class Worqr extends EventEmitter {
         log(`failing ${workerId}`);
 
         return new Promise((resolve, reject) => {
-            /**
-             * Represents queues and processes that this worker is working on.
-             */
-            interface WorkerItems {
-                queueNames: string[];
-                processIds: string[];
-            }
-
             Promise.resolve()
                 .then(() => this.getWorkingQueues(workerId as string))
                 .then(queueNames => new Promise<WorkerItems>((resolve, reject) => {
@@ -557,14 +565,6 @@ export class Worqr extends EventEmitter {
      */
     private cleanupWorkers(): Promise<void> {
         return new Promise((resolve, reject) => {
-            /**
-             * Represents whether a worker is dead.
-             */
-            interface WorkerStatus {
-                workerId: string;
-                dead: boolean;
-            }
-
             Promise.resolve()
                 .then(() => this.getExpiringWorkers())
                 .then(workerIds => Promise.all(workerIds.map(workerId => new Promise<WorkerStatus>((resolve, reject) => {
