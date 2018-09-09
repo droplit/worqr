@@ -83,9 +83,9 @@ export class Worqr extends EventEmitter {
     /**
      * Returns a list of queues a worker is working on.
      */
-    private getWorkingQueues(workerName: string): Promise<string[]> {
+    private getWorkingQueues(workerId: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.pub.smembers(`${this.workingQueues}:${workerName}`, (err, queueNames) => {
+            this.pub.smembers(`${this.workingQueues}:${workerId}`, (err, queueNames) => {
                 if (err) return reject(err);
                 resolve(queueNames);
             });
@@ -450,9 +450,9 @@ export class Worqr extends EventEmitter {
      */
     public getWorkers(): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.pub.smembers(this.workers, (err, workerNames) => {
+            this.pub.smembers(this.workers, (err, workerIds) => {
                 if (err) return reject(err);
-                resolve(workerNames);
+                resolve(workerIds);
             });
         });
     }
@@ -460,9 +460,9 @@ export class Worqr extends EventEmitter {
     /**
      * Returns whether a worker is working on a queue.
      */
-    public isWorking(workerName: string, queueName: string): Promise<boolean> {
+    public isWorking(workerId: string, queueName: string): Promise<boolean> {
         return new Promise((resolve, reject) => {
-            this.pub.sismember(`${this.workingQueues}:${workerName}`, queueName, (err, isMember) => {
+            this.pub.sismember(`${this.workingQueues}:${workerId}`, queueName, (err, isMember) => {
                 if (err) return reject(err);
                 resolve(isMember === 1);
             });
@@ -472,10 +472,10 @@ export class Worqr extends EventEmitter {
     /**
      * Fails a worker, putting all its tasks back on the queues they came from.
      */
-    public failWorker(workerName?: string): Promise<void> {
-        if (!workerName) workerName = this.workerId;
+    public failWorker(workerId?: string): Promise<void> {
+        if (!workerId) workerId = this.workerId;
 
-        log(`failing ${workerName}`);
+        log(`failing ${workerId}`);
 
         return new Promise((resolve, reject) => {
             /**
@@ -487,7 +487,7 @@ export class Worqr extends EventEmitter {
             }
 
             Promise.resolve()
-                .then(() => this.getWorkingQueues(workerName as string))
+                .then(() => this.getWorkingQueues(workerId as string))
                 .then(queueNames => new Promise<WorkerItems>((resolve, reject) => {
                     const processIds: string[] = [];
 
@@ -498,11 +498,11 @@ export class Worqr extends EventEmitter {
                 }))
                 .then(({ queueNames, processIds }) => {
                     let multi = this.pub.multi()
-                        .srem(this.workers, workerName as string)
-                        .srem(this.expiringWorkers, workerName as string)
-                        .srem(this.permanentWorkers, workerName as string)
-                        .del(`${this.workerTimers}:${workerName}`)
-                        .del(`${this.workingQueues}:${workerName}`);
+                        .srem(this.workers, workerId as string)
+                        .srem(this.expiringWorkers, workerId as string)
+                        .srem(this.permanentWorkers, workerId as string)
+                        .del(`${this.workerTimers}:${workerId}`)
+                        .del(`${this.workingQueues}:${workerId}`);
 
                     queueNames.forEach(queueName => {
                         multi = multi
@@ -520,7 +520,7 @@ export class Worqr extends EventEmitter {
                     multi.exec(err => {
                         if (err) return reject(err);
 
-                        if (workerName === this.workerId) {
+                        if (workerId === this.workerId) {
                             queueNames.forEach(queueName => {
                                 this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
                                 this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
@@ -544,9 +544,9 @@ export class Worqr extends EventEmitter {
      */
     private getExpiringWorkers(): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.pub.smembers(this.expiringWorkers, (err, workerNames) => {
+            this.pub.smembers(this.expiringWorkers, (err, workerIds) => {
                 if (err) return reject(err);
-                resolve(workerNames);
+                resolve(workerIds);
             });
         });
     }
@@ -561,21 +561,21 @@ export class Worqr extends EventEmitter {
              * Represents whether a worker is dead.
              */
             interface WorkerStatus {
-                workerName: string;
+                workerId: string;
                 dead: boolean;
             }
 
             Promise.resolve()
                 .then(() => this.getExpiringWorkers())
-                .then(workerNames => Promise.all(workerNames.map(workerName => new Promise<WorkerStatus>((resolve, reject) => {
-                    this.pub.keys(`${this.workerTimers}:${workerName}`, (err, workerTimers) => {
+                .then(workerIds => Promise.all(workerIds.map(workerId => new Promise<WorkerStatus>((resolve, reject) => {
+                    this.pub.keys(`${this.workerTimers}:${workerId}`, (err, workerTimers) => {
                         if (err) return reject(err);
-                        resolve({ workerName, dead: workerTimers.length === 0 });
+                        resolve({ workerId, dead: workerTimers.length === 0 });
                     });
                 }))))
                 .then(results => Promise.all(results
-                    .filter(({ workerName, dead }) => workerName !== this.workerId && dead)
-                    .map(({ workerName }) => this.failWorker(workerName))))
+                    .filter(({ workerId, dead }) => workerId !== this.workerId && dead)
+                    .map(({ workerId }) => this.failWorker(workerId))))
                 .then(() => resolve())
                 .catch(err => reject(err));
         });
