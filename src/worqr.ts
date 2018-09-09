@@ -71,7 +71,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns a list of all queues.
      */
-    public listQueues(): Promise<string[]> {
+    public getQueues(): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.pub.keys(`${this.queues}*`, (err, queueNames) => {
                 if (err) return reject(err);
@@ -83,7 +83,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns a list of queues a worker is working on.
      */
-    private listWorkingQueues(workerName: string): Promise<string[]> {
+    private getWorkingQueues(workerName: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.pub.smembers(`${this.workingQueues}:${workerName}`, (err, queueNames) => {
                 if (err) return reject(err);
@@ -159,7 +159,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns all the tasks in a queue.
      */
-    public listTasks(queueName: string): Promise<string[]> {
+    public getTasks(queueName: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.pub.lrange(`${this.queues}:${queueName}`, 0, -1, (err, tasks) => {
                 if (err) return reject(err);
@@ -171,7 +171,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns the task for a given process.
      */
-    private getTask(processId: string): Promise<string> {
+    private getTaskForProcess(processId: string): Promise<string> {
         return new Promise((resolve, reject) => {
             this.pub.lindex(`${this.processes}:${processId}`, 0, (err, task) => {
                 if (err) return reject(err);
@@ -243,7 +243,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns a list of all processes running.
      */
-    private listProcesses(): Promise<string[]> {
+    private getProcesses(): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.pub.keys(`${this.processes}*`, (err, processIds) => {
                 if (err) return reject(err);
@@ -255,13 +255,13 @@ export class Worqr extends EventEmitter {
     /**
      * Returns a list of processes for tasks matching the given task.
      */
-    public listMatchingProcesses(task: string): Promise<string[]> {
+    public getMatchingProcesses(task: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
             const processIdsForTask: string[] = [];
 
             Promise.resolve()
-                .then(() => this.listProcesses())
-                .then(processIds => Promise.all(processIds.map(processId => this.getTask(processId).then(t => {
+                .then(() => this.getProcesses())
+                .then(processIds => Promise.all(processIds.map(processId => this.getTaskForProcess(processId).then(t => {
                     if (t === task) {
                         processIdsForTask.push(processId);
                     }
@@ -274,7 +274,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns a list of all processes running on a queue.
      */
-    private listWorkingProcesses(queueName: string): Promise<string[]> {
+    private getWorkingProcesses(queueName: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.pub.smembers(`${this.workingProcesses}:${queueName}`, (err, processIds) => {
                 if (err) return reject(err);
@@ -399,7 +399,7 @@ export class Worqr extends EventEmitter {
 
         return new Promise((resolve, reject) => {
             Promise.resolve()
-                .then(() => this.listWorkingProcesses(queueName))
+                .then(() => this.getWorkingProcesses(queueName))
                 .then(processIds => {
                     let multi = this.pub.multi()
                         .srem(`${this.workingQueues}:${this.workerId}`, queueName)
@@ -448,7 +448,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns a list of all workers.
      */
-    public listWorkers(): Promise<string[]> {
+    public getWorkers(): Promise<string[]> {
         return new Promise((resolve, reject) => {
             this.pub.smembers(this.workers, (err, workerNames) => {
                 if (err) return reject(err);
@@ -487,11 +487,11 @@ export class Worqr extends EventEmitter {
             }
 
             Promise.resolve()
-                .then(() => this.listWorkingQueues(workerName as string))
+                .then(() => this.getWorkingQueues(workerName as string))
                 .then(queueNames => new Promise<WorkerItems>((resolve, reject) => {
                     const processIds: string[] = [];
 
-                    Promise.all(queueNames.map(queueName => this.listWorkingProcesses(queueName)))
+                    Promise.all(queueNames.map(queueName => this.getWorkingProcesses(queueName)))
                         .then(processIds2d => processIds2d.forEach(processIds1d => processIds.push(...processIds1d)))
                         .then(() => resolve({ queueNames, processIds }))
                         .catch(err => reject(err));

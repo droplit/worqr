@@ -36,6 +36,6 @@ export interface QueueEvent {
 }
 
 /**
- * Specifies what kind of event the queue event is.
+ * Specifies what kind of event a queue event is.
  */
 export type QueueEventType = 'work' | 'cancel' | 'delete';

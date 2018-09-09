@@ -40,17 +40,15 @@ function handleEvent(worqr: Worqr, event: QueueEvent) {
         // the worker should start a task on the queue
         case 'work':
             Promise.resolve()
-                .then(() => worqr.startTask(queueName))
+                .then(() => worqr.dequeue(queueName))
                 .then(process => {
                     if (!process) return log(`${worqr.getWorkerId()} did not get any tasks`);
 
-                    const { processName, task } = process;
-
-                    log(`${worqr.getWorkerId()} doing ${task}`);
+                    log(`${worqr.getWorkerId()} doing ${process.task}`);
 
                     // simulate a long async task
                     setTimeout(() => {
-                        worqr.finishProcess(processName);
+                        worqr.finishProcess(process.id);
                     }, Math.random() * 5000);
                 })
                 .catch(console.error);

@@ -4,7 +4,7 @@ import { Worqr } from '../src';
 import { QueueEvent } from '../src/types';
 
 let worqr: Worqr;
-let processName: string;
+let processId: string;
 
 describe('Worqr', function () {
     it('should create a new Worqr instance', () => {
@@ -15,12 +15,6 @@ describe('Worqr', function () {
         });
 
         expect(worqr).to.exist;
-    });
-
-    it('should clean up any existing workers', done => {
-        worqr.cleanupWorkers()
-            .then(() => done())
-            .catch(done);
     });
 
     it('should enqueue three tasks to a queue', done => {
@@ -51,7 +45,7 @@ describe('Worqr', function () {
     });
 
     it('should verify there are three queues', done => {
-        worqr.getQueueNames()
+        worqr.getQueues()
             .then(queueNames => {
                 expect(queueNames).to.include('queue1');
                 expect(queueNames).to.include('queue2');
@@ -78,7 +72,7 @@ describe('Worqr', function () {
     });
 
     it('should fail to start task on the first queue', done => {
-        worqr.startTask('queue1')
+        worqr.dequeue('queue1')
             .catch(() => done());
     });
 
@@ -97,27 +91,8 @@ describe('Worqr', function () {
             .catch(done);
     });
 
-    it('should get a list of queues the worker is working on', done => {
-        worqr.getWorkingQueues(worqr.getWorkerId())
-            .then(queueNames => {
-                expect(queueNames).to.have.lengthOf(1);
-                expect(queueNames).to.include('queue1');
-                done();
-            })
-            .catch(done);
-    });
-
-    it('should ensure the first queue exists', done => {
-        worqr.isQueue('queue1')
-            .then(isQueue => {
-                expect(isQueue).to.be.true;
-                done();
-            })
-            .catch(done);
-    });
-
     it('should ensure there are three tasks in the first queue', done => {
-        worqr.getQueueCount('queue1')
+        worqr.countQueue('queue1')
             .then(count => {
                 expect(count).to.equal(3);
                 done();
@@ -128,6 +103,7 @@ describe('Worqr', function () {
     it('should peek the first queue', done => {
         worqr.peekQueue('queue1')
             .then(task => {
+                expect(task).to.exist;
                 expect(task).to.equal('task1');
                 done();
             })
@@ -135,7 +111,7 @@ describe('Worqr', function () {
     });
 
     it('should list all the tasks in the first queue', done => {
-        worqr.getQueueTasks('queue1')
+        worqr.getTasks('queue1')
             .then(tasks => {
                 expect(tasks).to.have.lengthOf(3);
                 expect(tasks).to.include('task1');
@@ -147,62 +123,35 @@ describe('Worqr', function () {
     });
 
     it('should start a task on the first queue', done => {
-        worqr.startTask('queue1')
+        worqr.dequeue('queue1')
             .then(process => {
                 expect(process).to.exist;
                 if (process) {
-                    expect(process.processName).to.exist;
+                    expect(process.id).to.exist;
                     expect(process.task).to.exist;
                     expect(process.task).to.equal('task1');
-                    processName = process.processName;
+                    processId = process.id;
                 }
                 done();
             })
             .catch(done);
     });
 
-    it('should get a list of running processes', done => {
-        worqr.getProcesses()
-            .then(processes => {
-                expect(processes).to.have.lengthOf(1);
-                done();
-            })
-            .catch(done);
-    });
-
-    it('should get a list of running processes on the queue', done => {
-        worqr.getWorkingProcesses('queue1')
-            .then(processes => {
-                expect(processes).to.have.lengthOf(1);
-                done();
-            })
-            .catch(done);
-    });
-
-    it('should get the task for the process', done => {
-        worqr.getTask(processName)
-            .then(task => {
-                expect(task).to.equal('task1');
-                done();
-            })
-            .catch(done);
-    });
-
     it('should finish the process', done => {
-        worqr.finishProcess(processName)
+        worqr.finishProcess(processId)
             .then(() => done())
             .catch(done);
     });
 
     it('should start another task', done => {
-        worqr.startTask('queue1')
+        worqr.dequeue('queue1')
             .then(process => {
                 expect(process).to.exist;
                 if (process) {
-                    expect(process.processName).to.exist;
+                    expect(process.id).to.exist;
                     expect(process.task).to.exist;
                     expect(process.task).to.equal('task2');
-                    processName = process.processName;
+                    processId = process.id;
                 }
                 done();
             })
@@ -210,13 +159,13 @@ describe('Worqr', function () {
     });
 
     it('should stop the process', done => {
-        worqr.stopProcess(processName)
+        worqr.stopProcess(processId)
             .then(() => done())
             .catch(done);
     });
 
     it('should ensure there are two tasks in the first queue', done => {
-        worqr.getQueueCount('queue1')
+        worqr.countQueue('queue1')
             .then(count => {
                 expect(count).to.equal(2);
                 done();
@@ -239,27 +188,27 @@ describe('Worqr', function () {
 
     it('should finish three tasks on the first queue', done => {
         Promise.resolve()
-            .then(() => worqr.startTask('queue1'))
+            .then(() => worqr.dequeue('queue1'))
             .then(process => {
                 expect(process).to.exist;
                 if (process)
-                    return worqr.finishProcess(process.processName);
+                    return worqr.finishProcess(process.id);
                 else
                     return Promise.resolve();
             })
-            .then(() => worqr.startTask('queue1'))
+            .then(() => worqr.dequeue('queue1'))
             .then(process => {
                 expect(process).to.exist;
                 if (process)
-                    return worqr.finishProcess(process.processName);
+                    return worqr.finishProcess(process.id);
                 else
                     return Promise.resolve();
             })
-            .then(() => worqr.startTask('queue1'))
+            .then(() => worqr.dequeue('queue1'))
             .then(process => {
                 expect(process).to.exist;
                 if (process)
-                    return worqr.finishProcess(process.processName);
+                    return worqr.finishProcess(process.id);
                 else
                     return Promise.resolve();
             })
@@ -268,9 +217,9 @@ describe('Worqr', function () {
     });
 
     it('should ensure the first queue is empty', done => {
-        worqr.isQueue('queue1')
-            .then(isQueue => {
-                expect(isQueue).to.be.false;
+        worqr.peekQueue('queue1')
+            .then(task => {
+                expect(task).to.not.exist;
                 done();
             })
             .catch(done);
