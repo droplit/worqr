@@ -17,6 +17,12 @@ describe('Worqr', function () {
         expect(worqr).to.exist;
     });
 
+    it('should clean up any existing workers', done => {
+        worqr.cleanupWorkers()
+            .then(() => done())
+            .catch(done);
+    });
+
     it('should enqueue three tasks to a queue', done => {
         Promise.resolve()
             .then(() => worqr.enqueue('queue1', 'task1'))

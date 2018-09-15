@@ -563,7 +563,7 @@ export class Worqr extends EventEmitter {
      * Fails all workers that have timed out.
      * This is run every `workerCleanupInterval` milliseconds.
      */
-    private cleanupWorkers(): Promise<void> {
+    public cleanupWorkers(): Promise<void> {
         return new Promise((resolve, reject) => {
             Promise.resolve()
                 .then(() => this.getExpiringWorkers())
