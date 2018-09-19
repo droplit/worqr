@@ -1,6 +1,6 @@
 # Worqr
 
-A distributed, reliable, job queueing system that uses redis as a backend.
+A distributed, reliable, job queueing system that only requires redis as the backend.
 
 - By Droplit
 
@@ -284,3 +284,6 @@ Build and transpile TS
 ```
 npm run build
 ```
+
+
+* diagrams made with http://asciiflow.com/
