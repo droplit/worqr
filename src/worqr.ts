@@ -381,6 +381,7 @@ export class Worqr extends EventEmitter {
     /**
      * Starts work on a queue.
      * The worker will start emitting events for the queue, which clients should subscribe to.
+     * This also emits an event immediately if there are tasks on the queue.
      */
     public startWork(queueName: string): Promise<void> {
         log(`${this.workerId} starting work on ${queueName}`);
@@ -395,14 +396,23 @@ export class Worqr extends EventEmitter {
                     this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
                     this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
 
-                    this.peekQueue(queueName).then(task => {
-                        if (task) {
-                            this.pub.publish(`${this.redisKeyPrefix}_${queueName}_work`, '1');
-                        }
-                    });
+                    this.requestWork(queueName);
 
                     resolve();
                 });
+        });
+    }
+
+    /**
+     * Requests a task from the queue.
+     * If there is one, an event with `type: 'work'` will be published.
+     * This is so the client doesn't have to set up their own polling of the queue.
+     */
+    public requestWork(queueName: string): void {
+        this.peekQueue(queueName).then(task => {
+            if (task) {
+                this.pub.publish(`${this.redisKeyPrefix}_${queueName}_work`, '1');
+            }
         });
     }
 

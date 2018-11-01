@@ -49,6 +49,9 @@ function handleEvent(worqr: Worqr, event: QueueEvent) {
                     // simulate a long async task
                     setTimeout(() => {
                         worqr.finishProcess(process.id);
+
+                        // ask for more work
+                        worqr.requestWork(queueName);
                     }, Math.random() * 5000);
                 })
                 .catch(console.error);
