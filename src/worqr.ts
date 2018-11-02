@@ -72,9 +72,7 @@ export class Worqr extends EventEmitter {
             const queueName = unprefixedChannel.substr(0, lastUnderscore);
             const type = unprefixedChannel.substr(lastUnderscore + 1) as QueueEventType;
 
-            const queueEvent: QueueEvent = { type, message };
-
-            this.emit(queueName, queueEvent);
+            this.emit(queueName, type, message);
         });
 
         setInterval(() => {
@@ -197,7 +195,7 @@ export class Worqr extends EventEmitter {
     }
 
     /**
-     * Removes a task from the queue, emitting an event with `type: 'cancel', message: <task>`.
+     * Removes a task from the queue, emitting an event with `type: 'cancel'` and  `message: <task>`.
      * Clients should listen for this event and stop all processes matching the task.
      */
     public cancelTasks(queueName: string, task: string): Promise<void> {
