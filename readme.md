@@ -5,6 +5,9 @@
   <p align="center" style="margin-top:-50px">Atomic Redis Queue</p>
 </p>
 
+<a href="https://droplit.io">
+    <img height="60" width="227" src="https://raw.githubusercontent.com/droplit/content/master/createdByDroplitBanner.png">
+</a>
 
 # Worqr
 
