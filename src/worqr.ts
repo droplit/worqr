@@ -72,9 +72,7 @@ export class Worqr extends EventEmitter {
             const queueName = unprefixedChannel.substr(0, lastUnderscore);
             const type = unprefixedChannel.substr(lastUnderscore + 1) as QueueEventType;
 
-            const queueEvent: QueueEvent = { type, message };
-
-            this.emit(queueName, queueEvent);
+            this.emit(queueName, type, message);
         });
 
         setInterval(() => {
@@ -197,7 +195,7 @@ export class Worqr extends EventEmitter {
     }
 
     /**
-     * Removes a task from the queue, emitting an event with `type: 'cancel', message: <task>`.
+     * Removes a task from the queue, emitting an event with `type: 'cancel'` and  `message: <task>`.
      * Clients should listen for this event and stop all processes matching the task.
      */
     public cancelTasks(queueName: string, task: string): Promise<void> {
@@ -381,6 +379,7 @@ export class Worqr extends EventEmitter {
     /**
      * Starts work on a queue.
      * The worker will start emitting events for the queue, which clients should subscribe to.
+     * This also emits an event immediately if there are tasks on the queue.
      */
     public startWork(queueName: string): Promise<void> {
         log(`${this.workerId} starting work on ${queueName}`);
@@ -395,14 +394,23 @@ export class Worqr extends EventEmitter {
                     this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
                     this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
 
-                    this.peekQueue(queueName).then(task => {
-                        if (task) {
-                            this.pub.publish(`${this.redisKeyPrefix}_${queueName}_work`, '1');
-                        }
-                    });
+                    this.requestWork(queueName);
 
                     resolve();
                 });
+        });
+    }
+
+    /**
+     * Requests a task from the queue.
+     * If there is one, an event with `type: 'work'` will be published.
+     * This is so the client doesn't have to set up their own polling of the queue.
+     */
+    public requestWork(queueName: string): void {
+        this.peekQueue(queueName).then(task => {
+            if (task) {
+                this.pub.publish(`${this.redisKeyPrefix}_${queueName}_work`, '1');
+            }
         });
     }
 

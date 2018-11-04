@@ -28,13 +28,11 @@ const worqr3 = new Worqr({
 
 const queueName = 'myQueue';
 
-worqr1.on(queueName, (event: QueueEvent) => handleEvent(worqr1, event));
-worqr2.on(queueName, (event: QueueEvent) => handleEvent(worqr2, event));
-worqr3.on(queueName, (event: QueueEvent) => handleEvent(worqr3, event));
+worqr1.on(queueName, (type: string, message: string) => handleEvent(worqr1, type, message));
+worqr2.on(queueName, (type: string, message: string) => handleEvent(worqr2, type, message));
+worqr3.on(queueName, (type: string, message: string) => handleEvent(worqr3, type, message));
 
-function handleEvent(worqr: Worqr, event: QueueEvent) {
-    const { type, message } = event;
-
+function handleEvent(worqr: Worqr, type: string, message: string) {
     switch (type) {
         // indicates that work has been added to the queue
         // the worker should start a task on the queue
@@ -49,6 +47,9 @@ function handleEvent(worqr: Worqr, event: QueueEvent) {
                     // simulate a long async task
                     setTimeout(() => {
                         worqr.finishProcess(process.id);
+
+                        // ask for more work
+                        worqr.requestWork(queueName);
                     }, Math.random() * 5000);
                 })
                 .catch(console.error);
