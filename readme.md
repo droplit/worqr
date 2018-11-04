@@ -90,14 +90,18 @@ worqr.on('<queue name>', (type: string, message: string) => {
     switch (type) {
         case 'work':
             // do work
+            // message: the number of new tasks
+            doWork();
             ...
             break;
         case 'cancel':
             // stop work
+            // message: task to cancel 
             ...
             break;
         case 'delete':
             // work queue was deleted, no action necessarilly needed
+            // message: empty string
             ...
             break;
         }       
@@ -107,6 +111,33 @@ worqr.on('<queue name>', (type: string, message: string) => {
 await worqr.startWork('<queue name>');
 ```
 
+#### Work processing function
+Once a task is started, it's called a "process". The process has a `processId` that must be used to uniquely finish or fail that task instance. This is because a task payload is not necessarilly unique.
+
+```
+async function doWork() {
+    const process = await worqr.dequeue('<queue name>');
+    // perform the task `process.task`
+    ...
+    // complete the task
+    await worqr.finishProcess(process.id);
+    if (task) {
+        setImmediate(() => {
+            doWork();
+        });
+    }
+}
+```
+
+### Stop working on a task/Fail a task
+If something goes wrong while processing a task, you can fail the task to send it back to the queue.
+
+```
+await worqr.stopProcess('<processId>');
+```
+
+> NOTE: Worqr does not track the historical state of a task. If it fails for some reason that will always fail like invalid input, the task should be marked as finished and that error should be handled in your code.
+
 ### Fall all tasks
 If your process is shutting down and you want to return all work to the queue, you can fail your worker
 
@@ -114,7 +145,25 @@ If your process is shutting down and you want to return all work to the queue, y
 worqr.failWorker();
 ```
 
-## Diagrams
+## Additional command reference
+
+### Get all queue names
+```
+function getQueues(): Promise<string[]>
+```
+
+### Get all current workers
+```
+public getWorkers(): Promise<string[]>
+```
+
+### Get queues that are being worked on by a particular worker
+Omitting the `workerId` will use the current workerId
+```
+private getWorkingQueues(workerId?: string): Promise<string[]>
+```
+
+## What's actually happening?
 
 ### Enqueue
 
