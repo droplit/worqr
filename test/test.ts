@@ -1,7 +1,6 @@
 import { expect } from 'chai';
 
 import { Worqr } from '../src';
-import { QueueEvent } from '../src/types';
 
 let worqr: Worqr;
 let processId: string;
@@ -25,27 +24,21 @@ describe('Worqr', function () {
 
     it('should enqueue three tasks to a queue', done => {
         Promise.resolve()
-            .then(() => worqr.enqueue('queue1', 'task1'))
-            .then(() => worqr.enqueue('queue1', 'task2'))
-            .then(() => worqr.enqueue('queue1', 'task3'))
+            .then(() => worqr.enqueue('queue1', ['task1', 'task2', 'task3']))
             .then(() => done())
             .catch(done);
     });
 
     it('should enqueue three tasks to a second queue', done => {
         Promise.resolve()
-            .then(() => worqr.enqueue('queue2', 'task1'))
-            .then(() => worqr.enqueue('queue2', 'task2'))
-            .then(() => worqr.enqueue('queue2', 'task3'))
+            .then(() => worqr.enqueue('queue2', ['task1', 'task2', 'task3']))
             .then(() => done())
             .catch(done);
     });
 
     it('should enqueue three tasks to a third queue', done => {
         Promise.resolve()
-            .then(() => worqr.enqueue('queue3', 'task1'))
-            .then(() => worqr.enqueue('queue3', 'task2'))
-            .then(() => worqr.enqueue('queue3', 'task3'))
+            .then(() => worqr.enqueue('queue3', ['task1', 'task2', 'task3']))
             .then(() => done())
             .catch(done);
     });
@@ -180,8 +173,8 @@ describe('Worqr', function () {
     });
 
     it('should subscribe to the first queue, enqueue a task, and get a work event', done => {
-        function listener(event: QueueEvent) {
-            expect(event.type).to.equal('work');
+        function listener(type: string, message: string) {
+            expect(type).to.equal('work');
             worqr.removeListener('queue1', listener);
             done();
         }
@@ -232,10 +225,10 @@ describe('Worqr', function () {
     });
 
     it('should subscribe to the first queue, enqueue a task, cancel the task, receive a cancel event, and stop the process', done => {
-        function listener(event: QueueEvent) {
-            if (event.type === 'cancel') {
+        function listener(type: string, message: string) {
+            if (type === 'cancel') {
                 Promise.resolve()
-                    .then(() => worqr.getMatchingProcesses(event.message))
+                    .then(() => worqr.getMatchingProcesses(message))
                     .then(processNames => processNames.map(processName => worqr.stopProcess(processName)))
                     .then(() => {
                         worqr.removeListener('queue1', listener);
@@ -254,8 +247,8 @@ describe('Worqr', function () {
     });
 
     it('should subscribe to the first queue, delete the queue, and receive a delete event, and stop work on the queue', done => {
-        function listener(event: QueueEvent) {
-            if (event.type === 'delete') {
+        function listener(type: string, message: string) {
+            if (type === 'delete') {
                 worqr.stopWork('queue1')
                     .then(() => {
                         worqr.removeListener('queue1', listener);

@@ -1,7 +1,13 @@
+import { RedisClient } from 'redis';
+
 /**
  * Options for Redis connection.
+ * You can use an existing Redis connection by supplying it in the `data` and `subscribe` properties.
+ * Otherwise, you can create a new connection by filling in `host`, `port`, and `password`.
  */
 export interface RedisOptions {
+    data?: RedisClient;
+    subscribe?: RedisClient;
     host: string;
     port: number;
     password?: string;
@@ -26,16 +32,3 @@ export interface Process {
     id: string;
     task: string;
 }
-
-/**
- * Event emitted by a queue.
- */
-export interface QueueEvent {
-    type: QueueEventType;
-    message: string;
-}
-
-/**
- * Specifies what kind of event a queue event is.
- */
-export type QueueEventType = 'work' | 'cancel' | 'delete';

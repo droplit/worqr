@@ -1,5 +1,4 @@
 import { Worqr } from '../src';
-import { QueueEvent } from '../src/types';
 
 const log = require('debug')('worqr:client');
 

@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import * as redis from 'redis';
 import * as uuid from 'uuid';
 
-import { RedisOptions, WorqrOptions, Process, QueueEvent, QueueEventType } from './types';
+import { RedisOptions, WorqrOptions, Process } from './types';
 
 const log = require('debug')('worqr');
 
@@ -49,8 +49,8 @@ export class Worqr extends EventEmitter {
      */
     public constructor(redisOptions: RedisOptions, worqrOptions?: WorqrOptions) {
         super();
-        this.pub = redis.createClient(redisOptions);
-        this.sub = redis.createClient(redisOptions);
+        this.pub = redisOptions.data || redis.createClient(redisOptions);
+        this.sub = redisOptions.subscribe || redis.createClient(redisOptions);
         this.redisKeyPrefix = (worqrOptions && worqrOptions.redisKeyPrefix) || this.redisKeyPrefix;
         this.workerId = (worqrOptions && worqrOptions.instanceId) || this.workerId;
         this.workerHeartbeatInterval = (worqrOptions && worqrOptions.workerHeartbeatInterval) || this.workerHeartbeatInterval;
@@ -70,7 +70,7 @@ export class Worqr extends EventEmitter {
             const unprefixedChannel = channel.substr(channel.indexOf('_') + 1);
             const lastUnderscore = unprefixedChannel.lastIndexOf('_');
             const queueName = unprefixedChannel.substr(0, lastUnderscore);
-            const type = unprefixedChannel.substr(lastUnderscore + 1) as QueueEventType;
+            const type = unprefixedChannel.substr(lastUnderscore + 1);
 
             this.emit(queueName, type, message);
         });

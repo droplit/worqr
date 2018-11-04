@@ -10,7 +10,7 @@
         "example": "ts-node -r dotenv/config ./test/example.ts",
         "prepack": "npm run build",
         "start": "nodemon",
-        "test": "mocha --exit -r ts-node/register ./test/test.ts",
+        "test": "mocha --exit -r ts-node/register -r dotenv/config ./test/test.ts",
         "tslint": "tslint -t stylish 'src/**/*.ts' --force"
     },
     "author": "Bryan Jenks (droplit.io), Samir Mammadov (droplit.io), Davis Kauffmann (droplit.io)",
