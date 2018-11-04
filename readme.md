@@ -1,8 +1,8 @@
 <p align="center">
-  <a href="https://gulpjs.com">
+  <a href="https://github.com/droplit/worqr">
     <img height="275" width="275" src="https://raw.githubusercontent.com/droplit/content/master/worqr-800x800.png">
   </a>
-  <p align="center">Atomic Redis Queue</p>
+  <p align="center" style="margin-top:-50px">Atomic Redis Queue</p>
 </p>
 
 
