@@ -1,11 +1,13 @@
 # git #
 .git*
 
-# Typescript #
+# Typescript + build #
 tsconfig.json
 tslint.json
 src/
+nodemon.json
 
+# configuration + notes #
 *.env
-
-notes.md
+*.env.txt
+develop.md
