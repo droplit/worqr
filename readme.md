@@ -1,10 +1,10 @@
 # Worqr
 
-A distributed, reliable, job queueing system that only requires redis as the backend.
+A distributed, reliable, atomic, work queueing system that only requires redis as the backend.
 
 - By Droplit
 
-Requirements:
+Attributes:
 
 - Only Redis is required as a back-end server. No server components to install. Operates purely peer-to-peer in your application.
 - Every transaction is fully atomic (queue never left in inconsistent state).
@@ -12,7 +12,9 @@ Requirements:
 - Queue doesn't keep any item history.
 - As a work queue, each item is only delivered to exactly one worker.
 - Work items are not enveloped, so there is no encoding/decoding overhead or chance for the format to change in future releases.
-- Uses pub/sub for new work notifications.
+- Uses pub/sub for instantaneous new work notifications(no spin locks or blocking calls).
+
+
 
 ## Theory of Operation
 
@@ -244,46 +246,5 @@ failWorker (W1)
   c) if tasks exist for queue
      PUBLISH Q1_work count
 ```
-
-## Development
-
-### Setup
-
-Install dependencies
-
-```
-npm install
-```
-
-Create `.env` file and input environment variables. See `.example.env for reference`.
-
-### Lint code
-
-```
-npm run tslint
-```
-
-### Run tests
-
-```
-npm test
-```
-
-### Run example
-
-Example script to test functionality
-
-```
-npm run example
-```
-
-### Build
-
-Build and transpile TS
-
-```
-npm run build
-```
-
 
 * diagrams made with http://asciiflow.com/

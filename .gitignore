@@ -4,6 +4,6 @@
 # Project
 node_modules
 dist
-.env
+*.env
 
 *.tgz
