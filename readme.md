@@ -1,12 +1,12 @@
 <p align="center">
   <a href="https://github.com/droplit/worqr">
-    <img height="275" width="275" src="https://raw.githubusercontent.com/droplit/content/master/worqr-800x800.png">
+    <img height="300" width="300" src="https://raw.githubusercontent.com/droplit/content/master/worqr-800x800.png">
   </a>
   <p align="center" style="margin-top:-50px">Atomic Redis Queue</p>
 </p>
 
 <a href="https://droplit.io">
-    <img height="60" width="227" src="https://raw.githubusercontent.com/droplit/content/master/createdByDroplitBanner.png">
+    <img height="70" width="280" src="https://raw.githubusercontent.com/droplit/content/master/createdByDroplitBanner-100x400trans.png">
 </a>
 
 # Worqr
