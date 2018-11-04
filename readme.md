@@ -1,8 +1,18 @@
+<p align="center">
+  <a href="https://gulpjs.com">
+    <img height="275" width="275" src="https://raw.githubusercontent.com/droplit/content/master/worqr-800x800.png">
+  </a>
+  <p align="center">Atomic Redis Queue</p>
+</p>
+
+
 # Worqr
 
 A distributed, reliable, atomic, work queueing system that only requires redis as the backend.
 
-- By Droplit
+-By Droplit
+
+
 
 Attributes:
 
