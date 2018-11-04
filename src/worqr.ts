@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import * as redis from 'redis';
 import * as uuid from 'uuid';
 
-import { RedisOptions, WorqrOptions, Process, QueueEvent, QueueEventType } from './types';
+import { RedisOptions, WorqrOptions, Process, QueueEventType } from './types';
 
 const log = require('debug')('worqr');
 
@@ -97,9 +97,9 @@ export class Worqr extends EventEmitter {
     /**
      * Returns a list of queues a worker is working on.
      */
-    private getWorkingQueues(workerId: string): Promise<string[]> {
+    private getWorkingQueues(workerId?: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.pub.smembers(`${this.workingQueues}:${workerId}`, (err, queueNames) => {
+            this.pub.smembers(`${this.workingQueues}:${workerId || this.workerId}`, (err, queueNames) => {
                 if (err) return reject(err);
                 resolve(queueNames);
             });

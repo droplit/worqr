@@ -28,14 +28,6 @@ export interface Process {
 }
 
 /**
- * Event emitted by a queue.
- */
-export interface QueueEvent {
-    type: QueueEventType;
-    message: string;
-}
-
-/**
  * Specifies what kind of event a queue event is.
  */
 export type QueueEventType = 'work' | 'cancel' | 'delete';
