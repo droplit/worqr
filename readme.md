@@ -52,7 +52,67 @@ Worqr can handle one-time tasks as well as persistent tasks. A persistent task i
 ```
 let worqr = new Worqr({host: <domain/ip>, port: <port #>, password: <pwd>}, {redisKeyPrefix: <unique namespace>});
 ```
-> Workqr will open two connections to redis. One for data and one for subscriptions.
+> NOTE: Workqr will open two connections to redis. One for data and one for subscriptions.
+
+### Queing work
+
+```
+worqr.enqueue('<queue name>', '<task>');
+```
+> NOTE: Tasks are strings. Your code is responsible for serializing any complext objects.
+
+### Stopping work
+
+```
+worqr.cancelTasks('<queue name>', '<task>');
+```
+> NOTE: Worqr will cancel all instances of the specified task if more than one exists. Task cancellation must be supported by the worker process as well if the task is already in-process.
+
+### Getting setup to do work
+If this is a worker process (a process that will perform work), you must start the worker before you can accept work from a queue.
+
+```
+worqr.startWorker();
+```
+
+`startWorker` method returns a promise, so it also supports `await`:
+
+```
+await worqr.startWorker();
+```
+> NOTE: Once a worker has started, it will periodically refresh a redis key. Make sure your [event loop](https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/) doesn't get CPU starved or your worker will be failed and its work will be recycled back into the queue. If your event loop runs too long, you can use `setImmediate()` to break your long running process into smaller sections.
+
+### Taking work from a queue
+
+```
+// Add event handler for queue name first, so we don't miss any work events
+worqr.on('<queue name>', (type: string, message: string) => {
+    switch (type) {
+        case 'work':
+            // do work
+            ...
+            break;
+        case 'cancel':
+            // stop work
+            ...
+            break;
+        case 'delete':
+            // work queue was deleted, no action necessarilly needed
+            ...
+            break;
+        }       
+});
+
+// Ask for work from the specified queue
+await worqr.startWork('<queue name>');
+```
+
+### Fall all tasks
+If your process is shutting down and you want to return all work to the queue, you can fail your worker
+
+```
+worqr.failWorker();
+```
 
 ## Diagrams
 

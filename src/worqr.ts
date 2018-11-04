@@ -140,7 +140,7 @@ export class Worqr extends EventEmitter {
         return new Promise((resolve, reject) => {
             this.pub.multi()
                 .del(`${this.queues}:${queueName}`)
-                .publish(`${this.redisKeyPrefix}_${queueName}_delete`, '1')
+                .publish(`${this.redisKeyPrefix}_${queueName}_delete`, '')
                 .exec(err => {
                     if (err) return reject(err);
                     resolve();
@@ -162,7 +162,7 @@ export class Worqr extends EventEmitter {
         return new Promise((resolve, reject) => {
             this.pub.multi()
                 .lpush(`${this.queues}:${queueName}`, task)
-                .publish(`${this.redisKeyPrefix}_${queueName}_work`, '1')
+                .publish(`${this.redisKeyPrefix}_${queueName}_work`, Array.isArray(task) ? task.length.toString() : '1')
                 .exec(err => {
                     if (err) return reject(err);
                     resolve();
