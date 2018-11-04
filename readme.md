@@ -13,25 +13,27 @@
 
 A distributed, reliable, atomic, work queueing system that only requires redis as the backend.
 
--By Droplit
-
-
 
 Attributes:
 
-- Only Redis is required as a back-end server. No server components to install. Operates purely peer-to-peer in your application.
+- Ensure a task is performed **exactly once**.
+- Only Redis is required as a back-end server. No server components to install. Operates purely redis-based, peer-supervised in your application.
 - Every transaction is fully atomic (queue never left in inconsistent state).
 - When workers fail, all tasks are put back into the queue at the front.
 - Queue doesn't keep any item history.
 - As a work queue, each item is only delivered to exactly one worker.
 - Work items are not enveloped, so there is no encoding/decoding overhead or chance for the format to change in future releases.
 - Uses pub/sub for instantaneous new work notifications(no spin locks or blocking calls).
+- When a worker fails, all in-process work is automatically rescheduled to other workers.
+- Worqr is written in TypeScript, so you get automatic typings included.
 
 
 
 ## Theory of Operation
 
-The primary unit of work to be done is a **Task**. Tasks are organized into **Queues**. Queues are serviced by **Workers**.
+The primary unit of work to be done is a **Task**. Tasks are organized into **Queues**. Queues are serviced by **Workers**. When a worker takes a task, the task is assigned to that worker's in-process list. If a worker fails to keep it's active flag from expiring, all its in-process tasks are returned to the work queue.
+
+Worqr can handle one-time tasks as well as persistent tasks. A persistent task is a task that never completes. For example, if your worker needs to keep a set of open connections to other applications, each of those connections can be managed with a task so they are  opened exactly once by exactly one worker.
 
 ## Terminology
 
@@ -42,6 +44,15 @@ The primary unit of work to be done is a **Task**. Tasks are organized into **Qu
 **Worker** - a distributed agent that consumes tasks.
 
 **Queue** - a first in, first out list of Tasks.
+
+## Getting started
+
+### Initializing Worqr
+
+```
+let worqr = new Worqr({host: <domain/ip>, port: <port #>, password: <pwd>}, {redisKeyPrefix: <unique namespace>});
+```
+> Workqr will open two connections to redis. One for data and one for subscriptions.
 
 ## Diagrams
 
