@@ -8,8 +8,8 @@ import { RedisClient } from 'redis';
 export interface RedisOptions {
     data?: RedisClient;
     subscribe?: RedisClient;
-    host: string;
-    port: number;
+    host?: string;
+    port?: number;
     password?: string;
 }
 
