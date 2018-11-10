@@ -54,6 +54,12 @@ describe('Worqr', function () {
             .catch(done);
     });
 
+    it('should fail to start work on the first queue', done => {
+        worqr.startWork('queue1')
+            .then(() => done('shouldn\'t be able to start work'))
+            .catch(() => done());
+    });
+
     it('should start the worker', done => {
         worqr.startWorker()
             .then(() => done())
@@ -72,21 +78,13 @@ describe('Worqr', function () {
 
     it('should fail to start task on the first queue', done => {
         worqr.dequeue('queue1')
+            .then(() => done('shouldn\'t be able to start task'))
             .catch(() => done());
     });
 
     it('should start work on the first queue', done => {
         worqr.startWork('queue1')
             .then(() => done())
-            .catch(done);
-    });
-
-    it('should indicate the worker is working on the first queue', done => {
-        worqr.isWorking(worqr.getWorkerId(), 'queue1')
-            .then(isWorking => {
-                expect(isWorking).to.be.true;
-                done();
-            })
             .catch(done);
     });
 

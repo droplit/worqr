@@ -378,6 +378,7 @@ export class Worqr extends EventEmitter {
 
     /**
      * Starts work on a queue.
+     * The worker must be started before starting work on a queue.
      * The worker will start emitting events for the queue, which clients should subscribe to.
      * This also emits an event immediately if there are tasks on the queue.
      */
@@ -385,25 +386,29 @@ export class Worqr extends EventEmitter {
         log(`${this.workerId} starting work on ${queueName}`);
 
         return new Promise((resolve, reject) => {
-            this.pub.multi()
-                .sadd(`${this.workingQueues}:${this.workerId}`, queueName)
-                .exec(err => {
-                    if (err) return reject(err);
+            Promise.resolve()
+                .then(() => this.isStarted(this.workerId))
+                .then(isStarted => {
+                    if (!isStarted) return reject(`${this.workerId} is not started`);
 
-                    this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_work`);
-                    this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
-                    this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
+                    this.pub.sadd(`${this.workingQueues}:${this.workerId}`, queueName, err => {
+                        if (err) return reject(err);
 
-                    this.requestWork(queueName);
+                        this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_work`);
+                        this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
+                        this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
 
-                    resolve();
+                        this.requestWork(queueName);
+
+                        resolve();
+                    });
                 });
         });
     }
 
     /**
      * Requests a task from the queue.
-     * If there is one, an event with `type: 'work'` will be published.
+     * If there is one, an event with `type: 'work'` will be published on that queue's channel.
      * This is so the client doesn't have to set up their own polling of the queue.
      */
     public requestWork(queueName: string): void {
@@ -482,9 +487,21 @@ export class Worqr extends EventEmitter {
     }
 
     /**
+     * Returns whether a worker is started.
+     */
+    private isStarted(workerId: string): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            this.pub.sismember(this.workers, workerId, (err, isMember) => {
+                if (err) return reject(err);
+                resolve(isMember === 1);
+            });
+        });
+    }
+
+    /**
      * Returns whether a worker is working on a queue.
      */
-    public isWorking(workerId: string, queueName: string): Promise<boolean> {
+    private isWorking(workerId: string, queueName: string): Promise<boolean> {
         return new Promise((resolve, reject) => {
             this.pub.sismember(`${this.workingQueues}:${workerId}`, queueName, (err, isMember) => {
                 if (err) return reject(err);
