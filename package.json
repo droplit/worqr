@@ -4,7 +4,20 @@
     "description": "A distributed, reliable, atomic, work queueing system that only requires redis as the backend.",
     "desqription": "Worqr does all ur worq. I can haz worq? No... All ur worq are belong to worqr.",
     "keywords": [
-        "azure", "redis", "queue", "work queue", "worker queue", "rabbitmq", "message queue", "message broker", "amazon sqs", "celery", "activemq", "zeromq", "kafka", "amqp"
+        "azure",
+        "redis",
+        "queue",
+        "work queue",
+        "worker queue",
+        "rabbitmq",
+        "message queue",
+        "message broker",
+        "amazon sqs",
+        "celery",
+        "activemq",
+        "zeromq",
+        "kafka",
+        "amqp"
     ],
     "homepage": "https://github.com/droplit/worqr",
     "bugs": {
