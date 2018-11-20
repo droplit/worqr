@@ -10,7 +10,9 @@ const log = require('debug')('worqr');
  * Represents queues and processes that this worker is working on.
  */
 interface WorkerItems {
+    /** The queue names. */
     queueNames: string[];
+    /** The process IDs */
     processIds: string[];
 }
 
@@ -18,7 +20,9 @@ interface WorkerItems {
  * Represents whether a worker is dead.
  */
 interface WorkerStatus {
+    /** The unique worker ID. */
     workerId: string;
+    /** The worker status. */
     dead: boolean;
 }
 
@@ -26,22 +30,37 @@ interface WorkerStatus {
  * A distributed, reliable, job queueing system that uses redis as a backend.
  */
 export class Worqr extends EventEmitter {
+    /** The publish connection. */
     private pub: redis.RedisClient;
+    /** The subscribe connection. */
     private sub: redis.RedisClient;
+    /** The prefix to use in redis. */
     private redisKeyPrefix = 'worqr';
+    /** The unique ID of this instance. */
     private workerId = uuid.v4();
+    /** How often (in milliseconds) to refresh this worker's timer. */
     private workerHeartbeatInterval = 1000;
+    /** How long (in seconds) the timer should be set to. */
     private workerTimeout = 3;
+    /** How often (in milliseconds) to check for dead workers. */
     private workerCleanupInterval = 10000;
-    private digestBiteSize = 0;
+    /** The NodeJS timer for the heartbeat. */
     private workerTimerInterval?: NodeJS.Timer;
+    /** Queue prefix. */
     private queues: string;
+    /** Process prefix. */
     private processes: string;
+    /** Worker prefix. */
     private workers: string;
+    /** Expiring worker prefix. */
     private expiringWorkers: string;
+    /** Permanent worker prefix. */
     private permanentWorkers: string;
+    /** Worker timer prefix. */
     private workerTimers: string;
+    /** Working queue prefix. */
     private workingQueues: string;
+    /** Working process prefix. */
     private workingProcesses: string;
 
     /**
@@ -54,11 +73,10 @@ export class Worqr extends EventEmitter {
         this.pub = redisOptions.data || redis.createClient(redisOptions);
         this.sub = redisOptions.subscribe || redis.createClient(redisOptions);
         this.redisKeyPrefix = (worqrOptions && worqrOptions.redisKeyPrefix) || this.redisKeyPrefix;
-        this.workerId = (worqrOptions && worqrOptions.instanceId) || this.workerId;
+        this.workerId = (worqrOptions && worqrOptions.workerId) || this.workerId;
         this.workerHeartbeatInterval = (worqrOptions && worqrOptions.workerHeartbeatInterval) || this.workerHeartbeatInterval;
         this.workerTimeout = (worqrOptions && worqrOptions.workerTimeout) || this.workerTimeout;
         this.workerCleanupInterval = (worqrOptions && worqrOptions.workerCleanupInterval) || this.workerCleanupInterval;
-        this.digestBiteSize = (worqrOptions && worqrOptions.digestBiteSize) || this.digestBiteSize;
         this.queues = `${this.redisKeyPrefix}:queues`;
         this.processes = `${this.redisKeyPrefix}:processes`;
         this.workers = `${this.redisKeyPrefix}:workers`;
@@ -86,6 +104,7 @@ export class Worqr extends EventEmitter {
 
     /**
      * Returns a list of all queues.
+     * @returns {Promise<string[]>} The queue names.
      */
     public getQueues(): Promise<string[]> {
         return new Promise((resolve, reject) => {
@@ -99,6 +118,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns a list of queues a worker is working on.
      * @param {string} workerId The worker ID (ID of the instance if unspecified).
+     * @returns {Promise<string[]>} The queue names.
      */
     private getWorkingQueues(workerId?: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
@@ -112,6 +132,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns the next task in a queue.
      * @param {string} queueName The name of the queue.
+     * @returns {Promise<string>} The next task.
      */
     public peekQueue(queueName: string): Promise<string> {
         return new Promise((resolve, reject) => {
@@ -125,6 +146,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns the number of tasks in a queue.
      * @param {string} queueName The name of the queue.
+     * @returns {Promise<string>} The number of tasks.
      */
     public countQueue(queueName: string): Promise<number> {
         return new Promise((resolve, reject) => {
@@ -139,6 +161,7 @@ export class Worqr extends EventEmitter {
      * Deletes a queue, emitting an event with `type: 'delete'`.
      * Clients should listen for this event and stop work on the queue.
      * @param {string} queueName The name of the queue.
+     * @returns {Promise<void>}
      */
     public deleteQueue(queueName: string): Promise<void> {
         log(`deleting ${queueName}`);
@@ -163,6 +186,7 @@ export class Worqr extends EventEmitter {
      * Clients should listen for this event and start tasks on the queue.
      * @param {string} queueName The name of the queue.
      * @param {string | string[]} task A single task or array of tasks.
+     * @returns {Promise<void>}
      */
     public enqueue(queueName: string, task: string | string[]): Promise<void> {
         log(`queueing ${task.toString()} to ${queueName}`);
@@ -181,6 +205,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns all the tasks in a queue.
      * @param {string} queueName The name of the queue.
+     * @returns {Promise<string[]>} The tasks.
      */
     public getTasks(queueName: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
@@ -209,6 +234,7 @@ export class Worqr extends EventEmitter {
      * Clients should listen for this event and stop all processes matching the task.
      * @param {string} queueName The name of the queue.
      * @param {string} task The task to cancel.
+     * @returns {Promise<void>}
      */
     public cancelTasks(queueName: string, task: string): Promise<void> {
         log(`canceling ${task} on ${queueName}`);
@@ -233,6 +259,7 @@ export class Worqr extends EventEmitter {
      * The worker must have started work on the queue in order to get tasks.
      * Process will be null if the queue is empty.
      * @param {string} queueName The name of the queue.
+     * @returns {Promise<Process | null>} A process (null if there is no task).
      */
     public dequeue(queueName: string): Promise<Process | null> {
         log(`${this.workerId} starting task on ${queueName}`);
@@ -269,6 +296,7 @@ export class Worqr extends EventEmitter {
 
     /**
      * Returns a list of all processes running.
+     * @returns {Promise<string[]>} The process IDs.
      */
     private getProcesses(): Promise<string[]> {
         return new Promise((resolve, reject) => {
@@ -282,6 +310,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns a list of processes for tasks matching the given task.
      * @param {string} task The task to match.
+     * @returns {Promise<string[]>} The process IDs.
      */
     public getMatchingProcesses(task: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
@@ -302,6 +331,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns a list of all processes running on a queue.
      * @param {string} queueName The name of the queue.
+     * @returns {Promise<string[]>} The process IDs.
      */
     private getWorkingProcesses(queueName: string): Promise<string[]> {
         return new Promise((resolve, reject) => {
@@ -315,6 +345,7 @@ export class Worqr extends EventEmitter {
     /**
      * Stops a process, returning its task to the queue it came from.
      * @param {string} queueName The process ID.
+     * @returns {Promise<void}
      */
     public stopProcess(processId: string): Promise<void> {
         log(`stopping process ${processId}`);
@@ -335,6 +366,7 @@ export class Worqr extends EventEmitter {
     /**
      * Stops a process, removing the task entirely.
      * @param {string} queueName The process ID.
+     * @returns {Promise<void}
      */
     public finishProcess(processId: string): Promise<void> {
         log(`finishing process ${processId}`);
@@ -358,6 +390,7 @@ export class Worqr extends EventEmitter {
 
     /**
      * Returns the unique worker ID for this instance.
+     * @returns {string} The worker ID.
      */
     public getWorkerId(): string {
         return this.workerId;
@@ -365,6 +398,7 @@ export class Worqr extends EventEmitter {
 
     /**
      * Starts this worker.
+     * @returns {Promise<void}
      */
     public startWorker(): Promise<void> {
         log(`starting worker ${this.workerId}`);
@@ -399,6 +433,7 @@ export class Worqr extends EventEmitter {
      * The worker will start emitting events for the queue, which clients should subscribe to.
      * This also emits an event immediately if there are tasks on the queue.
      * @param {string} queueName The name of the queue.
+     * @returns {Promise<void}
      */
     public startWork(queueName: string): Promise<void> {
         log(`${this.workerId} starting work on ${queueName}`);
@@ -429,6 +464,7 @@ export class Worqr extends EventEmitter {
      * If there is one, an event with `type: 'work'` will be published on that queue's channel.
      * This is so the client doesn't have to set up their own polling of the queue.
      * @param {string} queueName The name of the queue.
+     * @returns {void}
      */
     public requestWork(queueName: string): void {
         this.peekQueue(queueName).then(task => {
@@ -442,6 +478,7 @@ export class Worqr extends EventEmitter {
      * Stops work on a queue.
      * The worker will stop emitting events for the queue.
      * @param {string} queueName The name of the queue.
+     * @returns {Promise<void>}
      */
     public stopWork(queueName: string): Promise<void> {
         log(`${this.workerId} stopping work on ${queueName}`);
@@ -476,6 +513,7 @@ export class Worqr extends EventEmitter {
 
     /**
      * Refreshes this worker's timer, indicating it is still active.
+     * @returns {Promise<void>}
      */
     private keepWorkerAlive(): Promise<void> {
         return new Promise((resolve, reject) => {
@@ -496,6 +534,7 @@ export class Worqr extends EventEmitter {
 
     /**
      * Returns a list of all workers.
+     * @returns {Promise<string[]>} The worker IDs.
      */
     public getWorkers(): Promise<string[]> {
         return new Promise((resolve, reject) => {
@@ -509,6 +548,7 @@ export class Worqr extends EventEmitter {
     /**
      * Returns whether a worker is started.
      * @param {string} workerId The worker ID.
+     * @returns {Promise<boolean>} Whether the worker is started.
      */
     private isStarted(workerId: string): Promise<boolean> {
         return new Promise((resolve, reject) => {
@@ -523,6 +563,7 @@ export class Worqr extends EventEmitter {
      * Returns whether a worker is working on a queue.
      * @param {string} workerId The worker ID.
      * @param {string} queueName The name of the queue.
+     * @returns {Promise<boolean>} Whether the worker is working on the queue.
      */
     private isWorking(workerId: string, queueName: string): Promise<boolean> {
         return new Promise((resolve, reject) => {
@@ -536,6 +577,7 @@ export class Worqr extends EventEmitter {
     /**
      * Fails a worker, putting all its tasks back on the queues they came from.
      * @param {string} workerId The worker ID (ID of the instance if unspecified).
+     * @returns {Promise<void>}
      */
     public failWorker(workerId?: string): Promise<void> {
         if (!workerId) workerId = this.workerId;
@@ -598,6 +640,7 @@ export class Worqr extends EventEmitter {
 
     /**
      * Returns a list of all expiring workers.
+     * @returns {Promise<string[]>} The worker IDs.
      */
     private getExpiringWorkers(): Promise<string[]> {
         return new Promise((resolve, reject) => {
@@ -611,6 +654,7 @@ export class Worqr extends EventEmitter {
     /**
      * Fails all workers that have timed out.
      * This is run every `workerCleanupInterval` milliseconds.
+     * @returns {Promise<void>}
      */
     public cleanupWorkers(): Promise<void> {
         return new Promise((resolve, reject) => {

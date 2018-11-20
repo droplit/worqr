@@ -28,6 +28,7 @@
     "types": "dist/index",
     "scripts": {
         "build": "npm run tslint && tsc",
+        "docs": "typedoc --excludePrivate --out docs src",
         "example": "ts-node -r dotenv/config ./test/example.ts",
         "prepack": "npm run build",
         "start": "nodemon",
@@ -66,6 +67,7 @@
         "nodemon": "^1.14.12",
         "ts-node": "^6.1.0",
         "tslint": "^5.11.0",
+        "typedoc": "^0.13.0",
         "typescript": "^2.9.1"
     }
 }
