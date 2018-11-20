@@ -60,10 +60,10 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
 
             Promise.resolve()
                 .then(() => worqr.getMatchingProcesses(task))
-                .then(processNames => Promise.all(processNames.map(processName => {
-                    log(`${worqr.getWorkerId()} finishing ${processName}`);
+                .then(processIds => Promise.all(processIds.map(processId => {
+                    log(`${worqr.getWorkerId()} finishing ${processId}`);
 
-                    return worqr.stopProcess(processName);
+                    return worqr.stopProcess(processId);
                 })))
                 .catch(console.error);
             break;
