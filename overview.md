@@ -9,4 +9,4 @@ Is **Worqr** for me?
 - You are already using Redis in your application
 - You don't want to run a queue service or pay per-transaction fees
 
-If the answer to all three of those questions is yes, then `worqr` is for you.
+If the answer to all three of those questions is yes, then **Worqr** is for you.
