@@ -26,7 +26,7 @@ Attributes:
 - When a worker fails, all in-process work is automatically rescheduled to other workers.
 - Worqr is written in TypeScript, so you get automatic typings included.
 
-Is `worqr` for me?
+Is **Worqr** for me?
 
 - You need to distribute a task workload
 - You are already using Redis in your application
