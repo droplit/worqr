@@ -2,7 +2,7 @@
   <a href="https://github.com/droplit/worqr">
     <img height="400" width="400" src="https://raw.githubusercontent.com/droplit/content/master/worqr-800x800.png">
   </a>
-  <p align="center" style="margin-top:-50px">Atomic Redis Queue</p>
+  <p align="center" style="margin-top:-70px;font-weight:bold;font-size:large">Atomic Redis Queue</p>
 </p>
 
 <a href="https://droplit.io">
@@ -12,7 +12,6 @@
 # Worqr
 
 A distributed, reliable, atomic, work queueing system that only requires redis as the backend.
-
 
 Attributes:
 
@@ -27,7 +26,13 @@ Attributes:
 - When a worker fails, all in-process work is automatically rescheduled to other workers.
 - Worqr is written in TypeScript, so you get automatic typings included.
 
+Is `worqr` for me?
 
+- You need to distribute a task workload
+- You are already using Redis in your application
+- You don't want to run a queue service or pay per-transaction fees
+
+If the answer to all three of those questions is yes, then `worqr` is for you.
 
 ## Theory of Operation
 
@@ -69,7 +74,7 @@ worqr.cancelTasks('<queue name>', '<task>');
 > NOTE: Worqr will cancel all instances of the specified task if more than one exists. Task cancellation must be supported by the worker process as well if the task is already in-process.
 
 ### Getting setup to do work
-If this is a worker process (a process that will perform work), you must start the worker before you can accept work from a queue.
+If this is a worker process (a process that will perform work), you must start the worker before you can accept work from a queue. Do not do this in a process that only queues tasks.
 
 ```
 worqr.startWorker();
@@ -117,11 +122,12 @@ Once a task is started, it's called a "process". The process has a `processId` t
 ```
 async function doWork() {
     const process = await worqr.dequeue('<queue name>');
-    // perform the task `process.task`
-    ...
-    // complete the task
-    await worqr.finishProcess(process.id);
-    if (task) {
+    if (process) {
+        // perform the task `process.task`
+        ...
+        // complete the task
+        await worqr.finishProcess(process.id);
+        // setImmediate gives the event loop a chance to perform other tasks first
         setImmediate(() => {
             doWork();
         });
