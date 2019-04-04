@@ -1,10 +1,11 @@
+import debug from 'debug';
 import { EventEmitter } from 'events';
 import * as redis from 'redis';
 import * as uuid from 'uuid';
 
 import { RedisOptions, WorqrOptions, Process } from './types';
 
-const log = require('debug')('worqr');
+const log = debug('worqr');
 
 /**
  * Represents queues and processes that this worker is working on.
