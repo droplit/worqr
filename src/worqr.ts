@@ -63,6 +63,8 @@ export class Worqr extends EventEmitter {
     private workingQueues: string;
     /** Working process prefix. */
     private workingProcesses: string;
+    private pubClientPassedIn = true;
+    private subClientPassedIn = true;
 
     /**
      * Creates a Worqr instance.
@@ -101,6 +103,7 @@ export class Worqr extends EventEmitter {
      */
     private get pub(): redis.RedisClient {
         if (!this._pubClientInstance) {
+            this.pubClientPassedIn = false;
             const { host, port } = this.redisOptions; // password is optional
             if (!host || !port) {
                 throw new Error('data client or redis host and port must be specified.');
@@ -117,6 +120,7 @@ export class Worqr extends EventEmitter {
      */
     private get sub(): redis.RedisClient {
         if (!this._subClientInstance) {
+            this.subClientPassedIn = false;
             const { host, port } = this.redisOptions; // password is optional
             if (!host || !port) {
                 throw new Error('subscribe client or redis host and port must be specified.');
@@ -647,6 +651,12 @@ export class Worqr extends EventEmitter {
                             }
                         }
 
+                        if (!this.pubClientPassedIn) {
+                            this._pubClientInstance.end();
+                        }
+                        if (!this.subClientPassedIn) {
+                            this._subClientInstance!.end();
+                        }
                         resolve();
                     });
                 })
