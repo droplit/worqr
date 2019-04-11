@@ -649,14 +649,17 @@ export class Worqr extends EventEmitter {
                             if (this.workerTimerInterval) {
                                 clearInterval(this.workerTimerInterval);
                             }
+
+                            if (!this.pubClientPassedIn) {
+                                this._pubClientInstance.end();
+                                this._pubClientInstance = undefined as any;
+                            }
+                            if (!this.subClientPassedIn) {
+                                this._subClientInstance!.end();
+                                this._subClientInstance = undefined;
+                            }
                         }
 
-                        if (!this.pubClientPassedIn) {
-                            this._pubClientInstance.end();
-                        }
-                        if (!this.subClientPassedIn) {
-                            this._subClientInstance!.end();
-                        }
                         resolve();
                     });
                 })
