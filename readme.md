@@ -9,6 +9,10 @@
     <img height="70" width="280" src="https://raw.githubusercontent.com/droplit/content/master/createdByDroplitBanner-worqr100x400.png" target="_blank">
 </a>
 
+[![NPM](https://nodei.co/npm/worqr.png)](https://www.npmjs.com/package/worqr)
+
+![node](https://img.shields.io/github/license/droplit/worqr.svg?style=flat-square)
+
 # Worqr
 
 A distributed, reliable, atomic, work queueing system that only requires redis as the backend.
