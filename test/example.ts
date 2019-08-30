@@ -98,11 +98,13 @@ Promise.resolve()
         const task1 = `task #${Math.round(Math.random() * 100)}`;
         const task2 = `task #${Math.round(Math.random() * 100)}`;
         const task3 = `task #${Math.round(Math.random() * 100)}`;
+        const task4 = ''; // make sure empty string task works correctly
 
         Promise.all([
             worqr.enqueue(queueName, task1),
             worqr.enqueue(queueName, task2),
-            worqr.enqueue(queueName, task3)
+            worqr.enqueue(queueName, task3),
+            worqr.enqueue(queueName, task4)
         ])
             .catch(console.error);
 

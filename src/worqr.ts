@@ -319,7 +319,7 @@ export class Worqr extends EventEmitter {
                         });
                 }))
                 .then(process => {
-                    if (!process.task) {
+                    if (process.task === null) {
                         this.pub.srem(`${this.workingProcesses}:${queueName}`, process.id, err => {
                             if (err) return reject(err);
                             resolve(null);
