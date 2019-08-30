@@ -28,12 +28,12 @@
     "types": "dist/index",
     "scripts": {
         "build": "npm run tslint && tsc",
-        "docs": "typedoc --excludePrivate --out docs src",
+        "docs": "npx typedoc --excludePrivate --out docs src",
         "example": "ts-node -r dotenv/config ./test/example.ts",
         "prepack": "npm run build",
         "start": "nodemon",
-        "test": "mocha --exit -r ts-node/register -r dotenv/config ./test/test.ts",
-        "tslint": "tslint -t stylish 'src/**/*.ts' --force"
+        "test": "npx mocha --exit -r ts-node/register -r dotenv/config ./test/test.ts",
+        "tslint": "npx tslint -t stylish 'src/**/*.ts' --force"
     },
     "author": "Droplit, Inc. (https://droplit.io)",
     "contributors": [
