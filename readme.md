@@ -9,6 +9,10 @@
     <img height="70" width="280" src="https://raw.githubusercontent.com/droplit/content/master/createdByDroplitBanner-worqr100x400.png" target="_blank">
 </a>
 
+[![NPM](https://nodei.co/npm/worqr.png)](https://www.npmjs.com/package/worqr)
+
+![node](https://img.shields.io/github/license/droplit/worqr.svg?style=flat-square)
+
 # Worqr
 
 A distributed, reliable, atomic, work queueing system that only requires redis as the backend.
@@ -54,21 +58,21 @@ Worqr can handle one-time tasks as well as persistent tasks. A persistent task i
 
 ### Initializing Worqr
 
-```
+```typescript
 let worqr = new Worqr({host: <domain/ip>, port: <port #>, password: <pwd>}, {redisKeyPrefix: <unique namespace>});
 ```
-> NOTE: Workqr will open two connections to redis. One for data and one for subscriptions.
+> NOTE: Worqr will open two connections to redis. One for data and one for subscriptions.
 
 ### Queing work
 
-```
+```typescript
 worqr.enqueue('<queue name>', '<task>');
 ```
-> NOTE: Tasks are strings. Your code is responsible for serializing any complext objects.
+> NOTE: Tasks are strings. Your code is responsible for serializing any complex objects.
 
 ### Stopping work
 
-```
+```typescript
 worqr.cancelTasks('<queue name>', '<task>');
 ```
 > NOTE: Worqr will cancel all instances of the specified task if more than one exists. Task cancellation must be supported by the worker process as well if the task is already in-process.
@@ -76,20 +80,20 @@ worqr.cancelTasks('<queue name>', '<task>');
 ### Getting setup to do work
 If this is a worker process (a process that will perform work), you must start the worker before you can accept work from a queue. Do not do this in a process that only queues tasks.
 
-```
+```typescript
 worqr.startWorker();
 ```
 
 `startWorker` method returns a promise, so it also supports `await`:
 
-```
+```typescript
 await worqr.startWorker();
 ```
 > NOTE: Once a worker has started, it will periodically refresh a redis key. Make sure your [event loop](https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/) doesn't get CPU starved or your worker will be failed and its work will be recycled back into the queue. If your event loop runs too long, you can use `setImmediate()` to break your long running process into smaller sections.
 
 ### Taking work from a queue
 
-```
+```typescript
 // Add event handler for queue name first, so we don't miss any work events
 worqr.on('<queue name>', (type: string, message: string) => {
     switch (type) {
@@ -105,7 +109,7 @@ worqr.on('<queue name>', (type: string, message: string) => {
             ...
             break;
         case 'delete':
-            // work queue was deleted, no action necessarilly needed
+            // work queue was deleted, no action necessarily needed
             // message: empty string
             ...
             break;
@@ -117,9 +121,9 @@ await worqr.startWork('<queue name>');
 ```
 
 #### Work processing function
-Once a task is started, it's called a "process". The process has a `processId` that must be used to uniquely finish or fail that task instance. This is because a task payload is not necessarilly unique.
+Once a task is started, it's called a "process". The process has a `processId` that must be used to uniquely finish or fail that task instance. This is because a task payload is not necessarily unique.
 
-```
+```typescript
 async function doWork() {
     const process = await worqr.dequeue('<queue name>');
     if (process) {
@@ -138,7 +142,7 @@ async function doWork() {
 ### Stop working on a task/Fail a task
 If something goes wrong while processing a task, you can fail the task to send it back to the queue.
 
-```
+```typescript
 await worqr.stopProcess('<processId>');
 ```
 
@@ -147,25 +151,25 @@ await worqr.stopProcess('<processId>');
 ### Fall all tasks
 If your process is shutting down and you want to return all work to the queue, you can fail your worker
 
-```
+```typescript
 worqr.failWorker();
 ```
 
 ## Additional command reference
 
 ### Get all queue names
-```
+```typescript
 function getQueues(): Promise<string[]>
 ```
 
 ### Get all current workers
-```
+```typescript
 public getWorkers(): Promise<string[]>
 ```
 
 ### Get queues that are being worked on by a particular worker
 Omitting the `workerId` will use the current workerId
-```
+```typescript
 private getWorkingQueues(workerId?: string): Promise<string[]>
 ```
 
