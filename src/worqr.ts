@@ -313,8 +313,10 @@ export class Worqr extends EventEmitter {
                     this.pub.multi()
                         .rpoplpush(`${this.queues}:${queueName}`, `${this.processes}:${processId}`)
                         .sadd(`${this.workingProcesses}:${queueName}`, processId)
-                        .exec((err, [task]) => {
+                        .exec((err, results) => {
                             if (err) return reject(err);
+                            if (!results) return reject(new Error('Failed to exec multi'));
+                            const [task] = results;
                             resolve({ id: processId, task });
                         });
                 }))
