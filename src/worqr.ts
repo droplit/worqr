@@ -2,8 +2,7 @@ import debug from 'debug';
 import { EventEmitter } from 'events';
 import * as redis from 'redis';
 import * as uuid from 'uuid';
-
-import { RedisOptions, WorqrOptions, Process } from './types';
+import { Process, RedisOptions, WorqrOptions } from './types';
 
 const log = debug('worqr');
 
@@ -32,9 +31,11 @@ interface WorkerStatus {
  */
 export class Worqr extends EventEmitter {
     /** The publish connection. */
-    private _pubClientInstance: redis.RedisClient;
+    private pub: redis.RedisClient;
+    private pubIsLocal = false;
     /** The subscribe connection. */
-    private _subClientInstance?: redis.RedisClient;
+    private sub: redis.RedisClient;
+    private subIsLocal = false;
     /** The prefix to use in redis. */
     private redisKeyPrefix = 'worqr';
     /** The unique ID of this instance. */
@@ -63,19 +64,16 @@ export class Worqr extends EventEmitter {
     private workingQueues: string;
     /** Working process prefix. */
     private workingProcesses: string;
-    private pubClientPassedIn = true;
-    private subClientPassedIn = true;
 
     /**
      * Creates a Worqr instance.
      * @param redisOptions Connection information for redis.
      * @param worqrOptions Settings for the worqr instance.
      */
-    public constructor(private redisOptions: RedisOptions, worqrOptions?: WorqrOptions) {
+    public constructor(redisOptions: RedisOptions, worqrOptions?: WorqrOptions) {
         super();
-        this._pubClientInstance = redisOptions.data || this.pub;
-        this._subClientInstance = redisOptions.subscribe;
-
+        this.pub = redisOptions.data || this.createPub(redisOptions);
+        this.sub = redisOptions.subscribe || this.createSub(redisOptions);
         this.redisKeyPrefix = (worqrOptions && worqrOptions.redisKeyPrefix) || this.redisKeyPrefix;
         this.workerId = (worqrOptions && worqrOptions.workerId) || this.workerId;
         this.workerHeartbeatInterval = (worqrOptions && worqrOptions.workerHeartbeatInterval) || this.workerHeartbeatInterval;
@@ -95,50 +93,40 @@ export class Worqr extends EventEmitter {
         }, this.workerCleanupInterval);
     }
 
-    // #region Redis pub/sub Clients
-
-    /**
-     * Maintains a single redis client instance for publishing events.
-     * @returns redis client instance.
-     */
-    private get pub(): redis.RedisClient {
-        if (!this._pubClientInstance) {
-            this.pubClientPassedIn = false;
-            const { host, port } = this.redisOptions; // password is optional
-            if (!host || !port) {
-                throw new Error('data client or redis host and port must be specified.');
-            }
-            this._pubClientInstance = redis.createClient(this.redisOptions);
-            this._pubClientInstance.on('error', error => this.emit('error', error));
+    private createPub(redisOptions: RedisOptions): redis.RedisClient {
+        this.pubIsLocal = true;
+        const { host, port, password } = redisOptions;
+        if (!host || !port) {
+            throw new Error('Host and port must be specified for redis data client');
         }
-        return this._pubClientInstance;
+        const pub = redis.createClient(redisOptions);
+        if (password) {
+            pub.auth(password);
+        }
+        pub.on('error', error => this.emit('error', error));
+        return pub;
     }
 
-    /**
-     * Maintains a single redis client instance for subscribing to events.
-     * @returns redis client instance.
-     */
-    private get sub(): redis.RedisClient {
-        if (!this._subClientInstance) {
-            this.subClientPassedIn = false;
-            const { host, port } = this.redisOptions; // password is optional
-            if (!host || !port) {
-                throw new Error('subscribe client or redis host and port must be specified.');
-            }
-            this._subClientInstance = redis.createClient(this.redisOptions);
-            this._subClientInstance.on('error', error => this.emit('error', error));
+    private createSub(redisOptions: RedisOptions): redis.RedisClient {
+        this.subIsLocal = true;
+        const { host, port, password } = redisOptions;
+        if (!host || !port) {
+            throw new Error('Host and port must be specified for redis subscribe client');
         }
-        this._subClientInstance.on('message', (channel, message) => {
+        const sub = redis.createClient(redisOptions);
+        if (password) {
+            sub.auth(password);
+        }
+        sub.on('error', error => this.emit('error', error));
+        sub.on('message', (channel, message) => {
             const unprefixedChannel = channel.substr(channel.indexOf('_') + 1);
             const lastUnderscore = unprefixedChannel.lastIndexOf('_');
             const queueName = unprefixedChannel.substr(0, lastUnderscore);
             const type = unprefixedChannel.substr(lastUnderscore + 1);
             this.emit(queueName, type, message);
         });
-        return this._subClientInstance!;
+        return sub;
     }
-
-    // #endregion
 
     // #region Queues
 
@@ -614,7 +602,7 @@ export class Worqr extends EventEmitter {
                     const processIds: string[] = [];
                     return Promise.all(queueNames.map(queueName => this.getWorkingProcesses(queueName)))
                         .then(processIds2d => processIds2d.forEach(processIds1d => processIds.push(...processIds1d)))
-                        .then(() => Promise.resolve({ queueNames, processIds }));
+                        .then(() => Promise.resolve<WorkerItems>({ queueNames, processIds }));
                 })
                 .then(({ queueNames, processIds }) => {
                     let multi = this.pub.multi()
@@ -642,7 +630,6 @@ export class Worqr extends EventEmitter {
 
                         if (workerId === this.workerId) {
                             queueNames.forEach(queueName => {
-                                if (!this._subClientInstance) return;
                                 this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
                                 this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
                                 this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
@@ -652,13 +639,13 @@ export class Worqr extends EventEmitter {
                                 clearInterval(this.workerTimerInterval);
                             }
 
-                            if (!this.pubClientPassedIn) {
-                                this._pubClientInstance.end();
-                                this._pubClientInstance = undefined as any;
+                            if (this.pubIsLocal) {
+                                this.pub.end(true);
+                                this.pub = undefined as any;
                             }
-                            if (!this.subClientPassedIn) {
-                                this._subClientInstance!.end();
-                                this._subClientInstance = undefined;
+                            if (!this.subIsLocal) {
+                                this.sub.end(true);
+                                this.sub = undefined as any;
                             }
                         }
 

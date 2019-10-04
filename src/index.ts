@@ -1,2 +1,2 @@
-export * from './worqr';
 export * from './types';
+export * from './worqr';

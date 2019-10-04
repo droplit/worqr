@@ -1,5 +1,4 @@
 import { expect } from 'chai';
-
 import { Worqr } from '../src';
 
 let worqr: Worqr;
@@ -56,7 +55,7 @@ describe('Worqr', function () {
 
     it('should fail to start work on the first queue', done => {
         worqr.startWork('queue1')
-            .then(() => done('shouldn\'t be able to start work'))
+            .then(() => done(new Error('Worker trying to start work on a queue before')))
             .catch(() => done());
     });
 
@@ -78,7 +77,7 @@ describe('Worqr', function () {
 
     it('should fail to start task on the first queue', done => {
         worqr.dequeue('queue1')
-            .then(() => done('shouldn\'t be able to start task'))
+            .then(() => done(new Error('Shouldn\'t be able to start task')))
             .catch(() => done());
     });
 
