@@ -10,13 +10,23 @@ describe('Worqr', function () {
             host: process.env.REDIS_HOST as string,
             port: Number.parseInt(process.env.REDIS_PORT as string),
             password: process.env.REDIS_PASSWORD as string
-        });
+        }, { redisKeyPrefix: 'worqr.test' });
 
         expect(worqr).to.exist;
     });
 
     it('should clean up any existing workers', done => {
         worqr.cleanupWorkers()
+            .then(() => done())
+            .catch(done);
+    });
+
+    it('should delete queues from previous tests, if any', done => {
+        Promise.all([
+            worqr.deleteQueue('queue1'),
+            worqr.deleteQueue('queue2'),
+            worqr.deleteQueue('queue3')
+        ])
             .then(() => done())
             .catch(done);
     });
@@ -55,7 +65,7 @@ describe('Worqr', function () {
 
     it('should fail to start work on the first queue', done => {
         worqr.startWork('queue1')
-            .then(() => done(new Error('Worker trying to start work on a queue before')))
+            .then(() => done(new Error('Worker trying to start work on a queue before being started')))
             .catch(() => done());
     });
 
@@ -75,7 +85,7 @@ describe('Worqr', function () {
             .catch(done);
     });
 
-    it('should fail to start task on the first queue', done => {
+    it('should fail to dequeue a task on the first queue', done => {
         worqr.dequeue('queue1')
             .then(() => done(new Error('Shouldn\'t be able to start task')))
             .catch(() => done());
@@ -118,7 +128,7 @@ describe('Worqr', function () {
             .catch(done);
     });
 
-    it('should start a task on the first queue', done => {
+    it('should dequeue a task on the first queue', done => {
         worqr.dequeue('queue1')
             .then(process => {
                 expect(process).to.exist;
@@ -261,17 +271,17 @@ describe('Worqr', function () {
             .catch(done);
     });
 
-    it('should fail the worker', done => {
-        worqr.failWorker()
-            .then(() => done())
-            .catch(done);
-    });
-
     it('should delete the other two queues', done => {
         Promise.all([
             worqr.deleteQueue('queue2'),
             worqr.deleteQueue('queue3')
         ])
+            .then(() => done())
+            .catch(done);
+    });
+
+    it('should fail the worker', done => {
+        worqr.failWorker()
             .then(() => done())
             .catch(done);
     });

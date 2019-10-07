@@ -32,9 +32,11 @@ interface WorkerStatus {
 export class Worqr extends EventEmitter {
     /** The publish connection. */
     private pub: redis.RedisClient;
+    /** Whether the publish connection is managed by Worqr or the client */
     private pubIsLocal = false;
     /** The subscribe connection. */
     private sub: redis.RedisClient;
+    /** Whether the subscribe connection is managed by Worqr or the client */
     private subIsLocal = false;
     /** The prefix to use in redis. */
     private redisKeyPrefix = 'worqr';
@@ -72,8 +74,41 @@ export class Worqr extends EventEmitter {
      */
     public constructor(redisOptions: RedisOptions, worqrOptions?: WorqrOptions) {
         super();
-        this.pub = redisOptions.data || this.createPub(redisOptions);
-        this.sub = redisOptions.subscribe || this.createSub(redisOptions);
+        if (redisOptions.data) {
+            this.pub = redisOptions.data;
+        } else {
+            const { host, port, password } = redisOptions;
+            if (!host || !port) {
+                throw new Error('Host and port must be specified for redis data client');
+            }
+            this.pub = redis.createClient(redisOptions);
+            if (password) {
+                this.pub.auth(password);
+            }
+            this.pub.on('error', error => this.emit('error', error));
+            this.pubIsLocal = true;
+        }
+        if (redisOptions.subscribe) {
+            this.sub = redisOptions.subscribe;
+        } else {
+            const { host, port, password } = redisOptions;
+            if (!host || !port) {
+                throw new Error('Host and port must be specified for redis subscribe client');
+            }
+            this.sub = redis.createClient(redisOptions);
+            if (password) {
+                this.sub.auth(password);
+            }
+            this.sub.on('error', error => this.emit('error', error));
+            this.sub.on('message', (channel, message) => {
+                const unprefixedChannel = channel.substr(channel.indexOf('_') + 1);
+                const lastUnderscore = unprefixedChannel.lastIndexOf('_');
+                const queueName = unprefixedChannel.substr(0, lastUnderscore);
+                const type = unprefixedChannel.substr(lastUnderscore + 1);
+                this.emit(queueName, type, message);
+            });
+            this.subIsLocal = true;
+        }
         this.redisKeyPrefix = (worqrOptions && worqrOptions.redisKeyPrefix) || this.redisKeyPrefix;
         this.workerId = (worqrOptions && worqrOptions.workerId) || this.workerId;
         this.workerHeartbeatInterval = (worqrOptions && worqrOptions.workerHeartbeatInterval) || this.workerHeartbeatInterval;
@@ -91,41 +126,6 @@ export class Worqr extends EventEmitter {
         setInterval(() => {
             this.cleanupWorkers();
         }, this.workerCleanupInterval);
-    }
-
-    private createPub(redisOptions: RedisOptions): redis.RedisClient {
-        this.pubIsLocal = true;
-        const { host, port, password } = redisOptions;
-        if (!host || !port) {
-            throw new Error('Host and port must be specified for redis data client');
-        }
-        const pub = redis.createClient(redisOptions);
-        if (password) {
-            pub.auth(password);
-        }
-        pub.on('error', error => this.emit('error', error));
-        return pub;
-    }
-
-    private createSub(redisOptions: RedisOptions): redis.RedisClient {
-        this.subIsLocal = true;
-        const { host, port, password } = redisOptions;
-        if (!host || !port) {
-            throw new Error('Host and port must be specified for redis subscribe client');
-        }
-        const sub = redis.createClient(redisOptions);
-        if (password) {
-            sub.auth(password);
-        }
-        sub.on('error', error => this.emit('error', error));
-        sub.on('message', (channel, message) => {
-            const unprefixedChannel = channel.substr(channel.indexOf('_') + 1);
-            const lastUnderscore = unprefixedChannel.lastIndexOf('_');
-            const queueName = unprefixedChannel.substr(0, lastUnderscore);
-            const type = unprefixedChannel.substr(lastUnderscore + 1);
-            this.emit(queueName, type, message);
-        });
-        return sub;
     }
 
     // #region Queues
@@ -310,10 +310,15 @@ export class Worqr extends EventEmitter {
                 }))
                 .then(process => {
                     if (process.task === null) {
-                        this.pub.srem(`${this.workingProcesses}:${queueName}`, process.id, err => {
-                            if (err) return reject(err);
-                            resolve(null);
-                        });
+                        const processId = process.id;
+                        this.pub.multi()
+                            .rpoplpush(`${this.processes}:${processId}`, `${this.queues}:${queueName}`)
+                            .del(`${this.processes}:${processId}`)
+                            .srem(`${this.workingProcesses}:${queueName}`, process.id)
+                            .exec(err => {
+                                if (err) return reject(err);
+                                resolve(null);
+                            });
                     } else {
                         resolve(process);
                     }
@@ -372,7 +377,7 @@ export class Worqr extends EventEmitter {
 
     /**
      * Stops a process, returning its task to the queue it came from.
-     * @param queueName The process ID.
+     * @param processId The process ID.
      */
     public stopProcess(processId: string): Promise<void> {
         log(`stopping process ${processId}`);
@@ -392,7 +397,7 @@ export class Worqr extends EventEmitter {
 
     /**
      * Stops a process, removing the task entirely.
-     * @param queueName The process ID.
+     * @param processId The process ID.
      */
     public finishProcess(processId: string): Promise<void> {
         log(`finishing process ${processId}`);
@@ -400,13 +405,17 @@ export class Worqr extends EventEmitter {
         return new Promise((resolve, reject) => {
             const queueName = processId.substr(0, processId.lastIndexOf('_'));
 
-            this.pub.multi()
-                .del(`${this.processes}:${processId}`)
-                .srem(`${this.workingProcesses}:${queueName}`, processId)
-                .exec(err => {
-                    if (err) return reject(err);
-                    resolve();
-                });
+            this.pub.lrange(`${this.processes}:${processId}`, 0, -1, (err, tasks) => {
+                if (err) return reject(err);
+                this.pub.multi()
+                    .del(`${this.processes}:${processId}`)
+                    .srem(`${this.workingProcesses}:${queueName}`, processId)
+                    .exec(err => {
+                        if (err) return reject(err);
+                        this.pub.publish(`${this.redisKeyPrefix}_${queueName}_done`, tasks.join());
+                        resolve();
+                    });
+            });
         });
     }
 
@@ -465,10 +474,11 @@ export class Worqr extends EventEmitter {
         return new Promise((resolve, reject) => {
             this.isStarted(this.workerId)
                 .then(isStarted => {
-                    if (!isStarted) reject(`${this.workerId} is not started`);
+                    if (!isStarted) return reject(`${this.workerId} is not started`);
                     this.pub.sadd(`${this.workingQueues}:${this.workerId}`, queueName, err => {
                         if (err) return reject(err);
                         this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_work`);
+                        this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_done`);
                         this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
                         this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
                         this.requestWork(queueName);
@@ -517,6 +527,7 @@ export class Worqr extends EventEmitter {
                     multi.exec(err => {
                         if (err) return reject(err);
                         this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
+                        this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_done`);
                         this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
                         this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
                         resolve();
@@ -590,6 +601,8 @@ export class Worqr extends EventEmitter {
 
     /**
      * Fails a worker, putting all its tasks back on the queues they came from.
+     * WARNING: Once failed, the Worqr instance is in an unusable state and should be garbage collected (or already should have been).
+     * Create a new instance instead of trying to restart the failed one.
      * @param workerId The worker ID (ID of the instance if unspecified).
      */
     public failWorker(workerId: string = this.workerId): Promise<void> {
@@ -631,6 +644,7 @@ export class Worqr extends EventEmitter {
                         if (workerId === this.workerId) {
                             queueNames.forEach(queueName => {
                                 this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
+                                this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_done`);
                                 this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
                                 this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
                             });
