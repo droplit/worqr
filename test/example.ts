@@ -39,13 +39,13 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
             Promise.resolve()
                 .then(() => worqr.dequeue(queueName))
                 .then(process => {
-                    if (!process) return log(`${worqr.getWorkerId()} did not get any tasks`);
+                    if (!process) return log(`${worqr.getWorkerId()}: did not get any tasks`);
 
-                    log(`${worqr.getWorkerId()} doing ${process.task}`);
+                    log(`${worqr.getWorkerId()}: doing ${process.task}`);
 
                     // simulate a long async task
                     setTimeout(() => {
-                        log(`${worqr.getWorkerId()} finished ${process.task}`);
+                        log(`${worqr.getWorkerId()}: finished ${process.task}`);
 
                         worqr.finishProcess(process.id);
 
@@ -57,8 +57,8 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
             break;
         }
         case 'done': {
-            const task = message;
-            log(`${worqr.getWorkerId()} someone finished ${task}`);
+            const { workerId, task } = JSON.parse(message);
+            log(`${worqr.getWorkerId()}: ${workerId} finished ${task}`);
             break;
         }
         // indicates that a certain task has been cancelled
@@ -68,7 +68,7 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
             Promise.resolve()
                 .then(() => worqr.getMatchingProcesses(task))
                 .then(processIds => Promise.all(processIds.map(processId => {
-                    log(`${worqr.getWorkerId()} stopping ${processId}`);
+                    log(`${worqr.getWorkerId()}: stopping ${processId}`);
 
                     return worqr.stopProcess(processId);
                 })))
@@ -81,7 +81,7 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
             Promise.resolve()
                 .then(() => worqr.stopWork(queueName))
                 .then(() => {
-                    log(`${worqr.getWorkerId()} stopped work on ${queueName}`);
+                    log(`${worqr.getWorkerId()}: stopped work on ${queueName}`);
                 })
                 .catch(console.error);
             break;

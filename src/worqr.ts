@@ -412,7 +412,7 @@ export class Worqr extends EventEmitter {
                     .srem(`${this.workingProcesses}:${queueName}`, processId)
                     .exec(err => {
                         if (err) return reject(err);
-                        this.pub.publish(`${this.redisKeyPrefix}_${queueName}_done`, tasks.join());
+                        this.pub.publish(`${this.redisKeyPrefix}_${queueName}_done`, JSON.stringify({ workerId: this.workerId, task: tasks.join() }));
                         resolve();
                     });
             });
