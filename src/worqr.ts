@@ -32,11 +32,11 @@ interface WorkerStatus {
 export class Worqr extends EventEmitter {
     /** The publish connection. */
     private pub: redis.RedisClient;
-    /** Whether the publish connection is managed by Worqr or the client */
+    /** Whether the publish connection is managed by Worqr or the client. */
     private pubIsLocal = false;
     /** The subscribe connection. */
     private sub: redis.RedisClient;
-    /** Whether the subscribe connection is managed by Worqr or the client */
+    /** Whether the subscribe connection is managed by Worqr or the client. */
     private subIsLocal = false;
     /** The prefix to use in redis. */
     private redisKeyPrefix = 'worqr';
@@ -601,7 +601,7 @@ export class Worqr extends EventEmitter {
 
     /**
      * Fails a worker, putting all its tasks back on the queues they came from.
-     * WARNING: Once failed, the Worqr instance is in an unusable state and should be garbage collected (or already should have been).
+     * WARNING: Once failed, the worker is in an unusable state and should be garbage collected (or already should have been destroyed somehow).
      * Create a new instance instead of trying to restart the failed one.
      * @param workerId The worker ID (ID of the instance if unspecified).
      */
