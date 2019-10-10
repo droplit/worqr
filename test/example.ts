@@ -36,26 +36,31 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
         // indicates that work has been added to the queue
         // the worker should start a task on the queue
         case 'work': {
-            Promise.resolve()
-                .then(() => worqr.dequeue(queueName))
-                .then(process => {
-                    if (!process) return log(`${worqr.getWorkerId()}: did not get any tasks`);
+            const count = Number(message);
+            log(`${worqr.getWorkerId()}: ${count} tasks have been added to ${queueName}`);
+            for (let i = 0; i < count; i++) {
+                Promise.resolve()
+                    .then(() => worqr.dequeue(queueName))
+                    .then(process => {
+                        if (!process) return log(`${worqr.getWorkerId()}: did not get any tasks`);
 
-                    log(`${worqr.getWorkerId()}: doing ${process.task}`);
+                        log(`${worqr.getWorkerId()}: doing ${process.task}`);
 
-                    // simulate a long async task
-                    setTimeout(() => {
-                        log(`${worqr.getWorkerId()}: finished ${process.task}`);
+                        // simulate a long async task
+                        setTimeout(() => {
+                            log(`${worqr.getWorkerId()}: finished ${process.task}`);
 
-                        worqr.finishProcess(process.id);
+                            worqr.finishProcess(process.id);
 
-                        // ask for more work
-                        worqr.requestWork(queueName);
-                    }, Math.random() * 5000);
-                })
-                .catch(console.error);
+                            // ask for more work
+                            worqr.requestWork(queueName);
+                        }, Math.random() * 5000);
+                    })
+                    .catch(console.error);
+            }
             break;
         }
+        // indicates that a task was finished by anybody
         case 'done': {
             const { workerId, task } = JSON.parse(message);
             log(`${worqr.getWorkerId()}: ${workerId} finished ${task}`);
@@ -108,12 +113,14 @@ Promise.resolve()
         const task2 = `task #${Math.round(Math.random() * 100)}`;
         const task3 = `task #${Math.round(Math.random() * 100)}`;
         const task4 = ''; // make sure empty string task works correctly
+        const tasks = [`task #${Math.round(Math.random() * 100)}`, `task #${Math.round(Math.random() * 100)}`]; // make sure task arrays work correctly
 
         Promise.all([
             worqr.enqueue(queueName, task1),
             worqr.enqueue(queueName, task2),
             worqr.enqueue(queueName, task3),
-            worqr.enqueue(queueName, task4)
+            worqr.enqueue(queueName, task4),
+            worqr.enqueue(queueName, tasks)
         ])
             .catch(console.error);
 

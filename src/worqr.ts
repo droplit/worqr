@@ -491,13 +491,14 @@ export class Worqr extends EventEmitter {
     /**
      * Requests a task from the queue.
      * If there is one, an event with `type: 'work'` will be published on that queue's channel.
+     * `message` will be the count of tasks on the queue.
      * This is so the client doesn't have to set up their own polling of the queue.
      * @param queueName The name of the queue.
      */
     public requestWork(queueName: string): void {
-        this.peekQueue(queueName).then(task => {
-            if (task) {
-                this.pub.publish(`${this.redisKeyPrefix}_${queueName}_work`, '1');
+        this.countQueue(queueName).then(count => {
+            if (count > 0) {
+                this.pub.publish(`${this.redisKeyPrefix}_${queueName}_work`, count.toString());
             }
         });
     }
