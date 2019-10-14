@@ -50,7 +50,7 @@ export class Worqr extends EventEmitter {
     /** How often (in milliseconds) to check for dead workers. */
     private workerCleanupInterval = 10000;
     /** The NodeJS timer for the heartbeat. */
-    private workerTimerInterval?: NodeJS.Timer;
+    private workerTimerIntervalId?: NodeJS.Timer;
     /** Queue prefix. */
     private queues: string;
     /** Unique task prefix. */
@@ -501,14 +501,13 @@ export class Worqr extends EventEmitter {
      */
     public startWorker(): Promise<void> {
         log(`starting worker ${this.workerId}`);
-
         return new Promise((resolve, reject) => {
-            const multi = this.pub.multi()
+            let multi = this.pub.multi()
                 .sadd(this.workers, this.workerId);
             if (this.workerTimeout < 0) {
-                multi.sadd(this.permanentWorkers, this.workerId);
+                multi = multi.sadd(this.permanentWorkers, this.workerId);
             } else {
-                multi
+                multi = multi
                     .sadd(this.expiringWorkers, this.workerId)
                     .set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout);
             }
@@ -516,7 +515,7 @@ export class Worqr extends EventEmitter {
                 if (err) {
                     return reject(err);
                 }
-                this.workerTimerInterval = setInterval(() => {
+                this.workerTimerIntervalId = setInterval(() => {
                     this.keepWorkerAlive();
                 }, this.workerHeartbeatInterval);
                 resolve();
@@ -722,8 +721,8 @@ export class Worqr extends EventEmitter {
                                 this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
                                 this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
                             });
-                            if (this.workerTimerInterval) {
-                                clearInterval(this.workerTimerInterval);
+                            if (this.workerTimerIntervalId) {
+                                clearInterval(this.workerTimerIntervalId);
                             }
                             if (this.pubIsLocal) {
                                 this.pub.end(true);

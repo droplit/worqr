@@ -59,9 +59,16 @@ Worqr can handle one-time tasks as well as persistent tasks. A persistent task i
 ### Initializing Worqr
 
 ```typescript
-let worqr = new Worqr({host: <domain/ip>, port: <port #>, password: <pwd>}, {redisKeyPrefix: <unique namespace>});
+let worqr = new Worqr({ host: <domain/ip>, port: <port #>, password: <pwd>}, {redisKeyPrefix: <unique namespace> });
 ```
-> NOTE: Worqr will open two connections to redis. One for data and one for subscriptions.
+> NOTE: Worqr will open two connections to Redis. One for data and one for subscriptions.
+
+You can also supply an existing data and/or subscription connection to prevent Worqr from opening it's own.
+
+```typescript
+let worqr = new Worqr({ data: <RedisClient instance>, subscribe: <RedisClient instance> });
+```
+> NOTE: These must be separate Redis connections if supplying both.
 
 ### Queing work
 

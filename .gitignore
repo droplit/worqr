@@ -8,3 +8,7 @@ docs
 *.env
 
 *.tgz
+
+# Tests
+.nyc_output
+coverage
