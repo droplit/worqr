@@ -6,6 +6,7 @@
             true,
             "check-space"
         ],
+        "curly": true,
         "indent": [
             true,
             "spaces"

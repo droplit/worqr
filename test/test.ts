@@ -11,7 +11,6 @@ describe('Worqr', function () {
             port: Number.parseInt(process.env.REDIS_PORT as string),
             password: process.env.REDIS_PASSWORD as string
         }, { redisKeyPrefix: 'worqr.test' });
-
         expect(worqr).to.exist;
     });
 
@@ -32,22 +31,19 @@ describe('Worqr', function () {
     });
 
     it('should enqueue three tasks to a queue', done => {
-        Promise.resolve()
-            .then(() => worqr.enqueue('queue1', ['task1', 'task2', 'task3']))
+        worqr.enqueue('queue1', ['task1', 'task2', 'task3'])
             .then(() => done())
             .catch(done);
     });
 
     it('should enqueue three tasks to a second queue', done => {
-        Promise.resolve()
-            .then(() => worqr.enqueue('queue2', ['task1', 'task2', 'task3']))
+        worqr.enqueue('queue2', ['task1', 'task2', 'task3'])
             .then(() => done())
             .catch(done);
     });
 
     it('should enqueue three tasks to a third queue', done => {
-        Promise.resolve()
-            .then(() => worqr.enqueue('queue3', ['task1', 'task2', 'task3']))
+        worqr.enqueue('queue3', ['task1', 'task2', 'task3'])
             .then(() => done())
             .catch(done);
     });
@@ -87,7 +83,7 @@ describe('Worqr', function () {
 
     it('should fail to dequeue a task on the first queue', done => {
         worqr.dequeue('queue1')
-            .then(() => done(new Error('Shouldn\'t be able to start task')))
+            .then(() => done(new Error('Worker was incorrectly able to start a task on a queue they are not working on')))
             .catch(() => done());
     });
 
@@ -132,12 +128,10 @@ describe('Worqr', function () {
         worqr.dequeue('queue1')
             .then(process => {
                 expect(process).to.exist;
-                if (process) {
-                    expect(process.id).to.exist;
-                    expect(process.task).to.exist;
-                    expect(process.task).to.equal('task1');
-                    processId = process.id;
-                }
+                expect(process!.id).to.exist;
+                expect(process!.task).to.exist;
+                expect(process!.task).to.equal('task1');
+                processId = process!.id;
                 done();
             })
             .catch(done);
@@ -153,12 +147,10 @@ describe('Worqr', function () {
         worqr.dequeue('queue1')
             .then(process => {
                 expect(process).to.exist;
-                if (process) {
-                    expect(process.id).to.exist;
-                    expect(process.task).to.exist;
-                    expect(process.task).to.equal('task2');
-                    processId = process.id;
-                }
+                expect(process!.id).to.exist;
+                expect(process!.task).to.exist;
+                expect(process!.task).to.equal('task2');
+                processId = process!.id;
                 done();
             })
             .catch(done);
@@ -197,26 +189,17 @@ describe('Worqr', function () {
             .then(() => worqr.dequeue('queue1'))
             .then(process => {
                 expect(process).to.exist;
-                if (process)
-                    return worqr.finishProcess(process.id);
-                else
-                    return Promise.resolve();
+                return worqr.finishProcess(process!.id);
             })
             .then(() => worqr.dequeue('queue1'))
             .then(process => {
                 expect(process).to.exist;
-                if (process)
-                    return worqr.finishProcess(process.id);
-                else
-                    return Promise.resolve();
+                return worqr.finishProcess(process!.id);
             })
             .then(() => worqr.dequeue('queue1'))
             .then(process => {
                 expect(process).to.exist;
-                if (process)
-                    return worqr.finishProcess(process.id);
-                else
-                    return Promise.resolve();
+                return worqr.finishProcess(process!.id);
             })
             .then(() => done())
             .catch(done);
@@ -277,6 +260,98 @@ describe('Worqr', function () {
             worqr.deleteQueue('queue3')
         ])
             .then(() => done())
+            .catch(done);
+    });
+
+    it('should enqueue a unique task to the first queue, implicitly recreating it', done => {
+        worqr.enqueue('queue1', 'uniqueTask1', true)
+            .then(() => done())
+            .catch(done);
+    });
+
+    it('should start work on the first queue', done => {
+        worqr.startWork('queue1')
+            .then(() => done())
+            .catch(done);
+    });
+
+    it('should ensure there is one task in the first queue', done => {
+        worqr.countQueue('queue1')
+            .then(count => {
+                expect(count).to.equal(1);
+                done();
+            })
+            .catch(done);
+    });
+
+    it('should fail to enqueue the same unique task', done => {
+        worqr.enqueue('queue1', 'uniqueTask1', true)
+            .then(() => done(new Error('Worker incorrectly was able to enqueue a unique task twice')))
+            .catch(() => done());
+    });
+
+    it('should dequeue the unique task', done => {
+        worqr.dequeue('queue1')
+            .then(process => {
+                expect(process).to.exist;
+                expect(process!.id).to.exist;
+                expect(process!.task).to.exist;
+                expect(process!.task).to.equal('uniqueTask1');
+                processId = process!.id;
+                done();
+            })
+            .catch(done);
+    });
+
+    it('should finish the process', done => {
+        worqr.finishProcess(processId)
+            .then(() => done())
+            .catch(done);
+    });
+
+    it('should enqueue a unique task to the first queue', done => {
+        worqr.enqueue('queue1', 'uniqueTask1', true)
+            .then(() => done())
+            .catch(done);
+    });
+
+    it('should be able to enqueue a non-unique task with the same name to the first queue', done => {
+        worqr.enqueue('queue1', 'uniqueTask1')
+            .then(() => done())
+            .catch(done);
+    });
+
+    it('should verify that the first queue has two tasks', done => {
+        worqr.countQueue('queue1')
+            .then(count => {
+                expect(count).to.equal(2);
+                done();
+            })
+            .catch(done);
+    });
+
+    it('should dequeue and complete both tasks', done => {
+        Promise.resolve()
+            .then(() => worqr.dequeue('queue1'))
+            .then(process => {
+                expect(process).to.exist;
+                return worqr.finishProcess(process!.id);
+            })
+            .then(() => worqr.dequeue('queue1'))
+            .then(process => {
+                expect(process).to.exist;
+                return worqr.finishProcess(process!.id);
+            })
+            .then(() => done())
+            .catch(done);
+    });
+
+    it('should verify that the first queue has no tasks', done => {
+        worqr.countQueue('queue1')
+            .then(count => {
+                expect(count).to.equal(0);
+                done();
+            })
             .catch(done);
     });
 

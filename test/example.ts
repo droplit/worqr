@@ -42,16 +42,14 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
                 Promise.resolve()
                     .then(() => worqr.dequeue(queueName))
                     .then(process => {
-                        if (!process) return log(`${worqr.getWorkerId()}: did not get any tasks`);
-
+                        if (!process) {
+                            return log(`${worqr.getWorkerId()}: did not get any tasks`);
+                        }
                         log(`${worqr.getWorkerId()}: doing ${process.task}`);
-
                         // simulate a long async task
                         setTimeout(() => {
                             log(`${worqr.getWorkerId()}: finished ${process.task}`);
-
                             worqr.finishProcess(process.id);
-
                             // ask for more work
                             worqr.requestWork(queueName);
                         }, Math.random() * 5000);
@@ -74,7 +72,6 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
                 .then(() => worqr.getMatchingProcesses(task))
                 .then(processIds => Promise.all(processIds.map(processId => {
                     log(`${worqr.getWorkerId()}: stopping ${processId}`);
-
                     return worqr.stopProcess(processId);
                 })))
                 .catch(console.error);
@@ -114,7 +111,6 @@ Promise.resolve()
         const task3 = `task #${Math.round(Math.random() * 100)}`;
         const task4 = ''; // make sure empty string task works correctly
         const tasks = [`task #${Math.round(Math.random() * 100)}`, `task #${Math.round(Math.random() * 100)}`]; // make sure task arrays work correctly
-
         Promise.all([
             worqr.enqueue(queueName, task1),
             worqr.enqueue(queueName, task2),
@@ -123,7 +119,6 @@ Promise.resolve()
             worqr.enqueue(queueName, tasks)
         ])
             .catch(console.error);
-
         createRandomTask();
     }, Math.random() * 5000);
 })();
