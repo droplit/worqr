@@ -460,7 +460,7 @@ export class Worqr extends EventEmitter {
      * Stops a process, removing the task entirely.
      * @param processId The process ID.
      */
-    public finishProcess(processId: string): Promise<void> {
+    public finishProcess(processId: string, result: any): Promise<void> {
         log(`finishing process ${processId}`);
         return new Promise((resolve, reject) => {
             const queueName = processId.substr(0, processId.lastIndexOf('_'));
@@ -477,7 +477,7 @@ export class Worqr extends EventEmitter {
                         if (err) {
                             return reject(err);
                         }
-                        this.pub.publish(`${this.redisKeyPrefix}_${queueName}_done`, JSON.stringify({ workerId: this.workerId, task }));
+                        this.pub.publish(`${this.redisKeyPrefix}_${queueName}_done`, JSON.stringify({ workerId: this.workerId, task, result }));
                         resolve();
                     });
             });
@@ -705,7 +705,6 @@ export class Worqr extends EventEmitter {
                     });
                     processIds.forEach(processId => {
                         const queueName = processId.substr(0, processId.lastIndexOf('_'));
-
                         multi = multi
                             .rpoplpush(`${this.processes}:${processId}`, `${this.queues}:${queueName}`)
                             .del(`${this.processes}:${processId}`);

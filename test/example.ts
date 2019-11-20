@@ -2,28 +2,17 @@ import { Worqr } from '../src';
 
 const log = require('debug')('worqr:client');
 
+const host = process.env.REDIS_HOST as string;
+const port = Number(process.env.REDIS_PORT as string);
+const password = process.env.REDIS_PASSWORD as string;
+const redisKeyPrefix = 'worqr.example';
+
 // in this example, the main worker is just responsible for putting tasks on the queue periodically
 // the other 3 are set up to pull work off of the queue
-const worqr = new Worqr({
-    host: process.env.REDIS_HOST as string,
-    port: Number.parseInt(process.env.REDIS_PORT as string),
-    password: process.env.REDIS_PASSWORD as string
-}, { redisKeyPrefix: 'worqr.example' });
-const worqr1 = new Worqr({
-    host: process.env.REDIS_HOST as string,
-    port: Number.parseInt(process.env.REDIS_PORT as string),
-    password: process.env.REDIS_PASSWORD as string
-}, { redisKeyPrefix: 'worqr.example' });
-const worqr2 = new Worqr({
-    host: process.env.REDIS_HOST as string,
-    port: Number.parseInt(process.env.REDIS_PORT as string),
-    password: process.env.REDIS_PASSWORD as string
-}, { redisKeyPrefix: 'worqr.example' });
-const worqr3 = new Worqr({
-    host: process.env.REDIS_HOST as string,
-    port: Number.parseInt(process.env.REDIS_PORT as string),
-    password: process.env.REDIS_PASSWORD as string
-}, { redisKeyPrefix: 'worqr.example' });
+const worqr = new Worqr({ host, port, password }, { redisKeyPrefix });
+const worqr1 = new Worqr({ host, port, password }, { redisKeyPrefix });
+const worqr2 = new Worqr({ host, port, password }, { redisKeyPrefix });
+const worqr3 = new Worqr({ host, port, password }, { redisKeyPrefix });
 
 const queueName = 'queue';
 
@@ -49,7 +38,7 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
                         // simulate a long async task
                         setTimeout(() => {
                             log(`${worqr.getWorkerId()}: finished ${process.task}`);
-                            worqr.finishProcess(process.id);
+                            worqr.finishProcess(process.id, 'some result');
                             // ask for more work
                             worqr.requestWork(queueName);
                         }, Math.random() * 5000);
@@ -60,8 +49,8 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
         }
         // indicates that a task was finished by anybody
         case 'done': {
-            const { workerId, task } = JSON.parse(message);
-            log(`${worqr.getWorkerId()}: ${workerId} finished ${task}`);
+            const { workerId, task, result } = JSON.parse(message) as { workerId: string, task: string, result: any };
+            log(`${worqr.getWorkerId()}: ${workerId} finished ${task} with result: ${result}`);
             break;
         }
         // indicates that a certain task has been cancelled
