@@ -460,7 +460,7 @@ export class Worqr extends EventEmitter {
      * Stops a process, removing the task entirely.
      * @param processId The process ID.
      */
-    public finishProcess(processId: string, result: any): Promise<void> {
+    public finishProcess(processId: string, result?: any): Promise<void> {
         log(`finishing process ${processId}`);
         return new Promise((resolve, reject) => {
             const queueName = processId.substr(0, processId.lastIndexOf('_'));
