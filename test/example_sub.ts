@@ -1,20 +1,17 @@
 import { Worqr } from '../src';
 
-const log = require('debug')('worqr:client');
+const log = require('debug')('worqr:example:sub');
 
 const host = process.env.REDIS_HOST as string;
 const port = Number(process.env.REDIS_PORT as string);
 const password = process.env.REDIS_PASSWORD as string;
 const redisKeyPrefix = 'worqr.example';
+const queueName = 'queue';
 
-// in this example, the main worker is just responsible for putting tasks on the queue periodically
-// the other 3 are set up to pull work off of the queue
-const worqr = new Worqr({ host, port, password }, { redisKeyPrefix });
+// workers to pull work off of the queue
 const worqr1 = new Worqr({ host, port, password }, { redisKeyPrefix });
 const worqr2 = new Worqr({ host, port, password }, { redisKeyPrefix });
 const worqr3 = new Worqr({ host, port, password }, { redisKeyPrefix });
-
-const queueName = 'queue';
 
 worqr1.on(queueName, (type: string, message: string) => handleEvent(worqr1, type, message));
 worqr2.on(queueName, (type: string, message: string) => handleEvent(worqr2, type, message));
@@ -38,7 +35,7 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
                         // simulate a long async task
                         setTimeout(() => {
                             log(`${worqr.getWorkerId()}: finished ${process.task}`);
-                            worqr.finishProcess(process.id, 'some result');
+                            worqr.finishProcess(process.id, `${process.task} completed`);
                             // ask for more work
                             worqr.requestWork(queueName);
                         }, Math.random() * 5000);
@@ -92,27 +89,3 @@ Promise.resolve()
         worqr3.startWork(queueName)
     ]))
     .catch(console.error);
-
-(function createRandomTask() {
-    setTimeout(() => {
-        const task1 = `task #${Math.round(Math.random() * 100)}`;
-        const task2 = `task #${Math.round(Math.random() * 100)}`;
-        const task3 = `task #${Math.round(Math.random() * 100)}`;
-        const task4 = ''; // make sure empty string task works correctly
-        const tasks = [`task #${Math.round(Math.random() * 100)}`, `task #${Math.round(Math.random() * 100)}`]; // make sure task arrays work correctly
-        Promise.all([
-            worqr.enqueue(queueName, task1),
-            worqr.enqueue(queueName, task2),
-            worqr.enqueue(queueName, task3),
-            worqr.enqueue(queueName, task4),
-            worqr.enqueue(queueName, tasks)
-        ])
-            .catch(console.error);
-        createRandomTask();
-    }, Math.random() * 5000);
-})();
-
-// setTimeout(() => {
-//     worqr.deleteQueue(queueName)
-//         .catch(console.error);
-// }, 10000);

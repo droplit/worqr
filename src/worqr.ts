@@ -226,7 +226,7 @@ export class Worqr extends EventEmitter {
      * Clients should listen for this event and start tasks on the queue.
      * @param queueName The name of the queue.
      * @param task A single task or array of tasks.
-     * @param unique Whether the task is be unique.
+     * @param unique Whether the task is unique.
      * If set to true, the promise will reject when trying to enqueue a duplicate unique task.
      * A queue can consist of a mix of unique and non-unique tasks.
      * Enqueueing a unique task that matches a non-unique task will NOT reject.
@@ -238,7 +238,7 @@ export class Worqr extends EventEmitter {
                 if (Array.isArray(task)) {
                     return reject(new Error('Unique task array not currently supported'));
                 }
-                const taskHash = crypto.createHash('md5').update(task).digest('hex').toString();
+                const taskHash = crypto.createHash('md5').update(task || '').digest('hex').toString();
                 this.pub.watch(`${this.uniqueTasks}:${taskHash}`, err => {
                     if (err) {
                         return reject(err);
@@ -468,7 +468,7 @@ export class Worqr extends EventEmitter {
                 if (err) {
                     return reject(err);
                 }
-                const taskHash = crypto.createHash('md5').update(task).digest('hex').toString();
+                const taskHash = crypto.createHash('md5').update(task || '').digest('hex').toString();
                 this.pub.multi()
                     .del(`${this.uniqueTasks}:${taskHash}`)
                     .del(`${this.processes}:${processId}`)
@@ -477,7 +477,11 @@ export class Worqr extends EventEmitter {
                         if (err) {
                             return reject(err);
                         }
-                        this.pub.publish(`${this.redisKeyPrefix}_${queueName}_done`, JSON.stringify({ workerId: this.workerId, task, result }));
+                        const message: any = { workerId: this.workerId, task };
+                        if (result) {
+                            message.result = result;
+                        }
+                        this.pub.publish(`${this.redisKeyPrefix}_${queueName}_done`, JSON.stringify(message));
                         resolve();
                     });
             });

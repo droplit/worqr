@@ -29,7 +29,8 @@
     "scripts": {
         "build": "npm run tslint && tsc",
         "docs": "npx typedoc --excludePrivate --out docs src",
-        "example": "ts-node -r dotenv/config ./test/example.ts",
+        "example_pub": "ts-node -r dotenv/config ./test/example_pub.ts",
+        "example_sub": "ts-node -r dotenv/config ./test/example_sub.ts",
         "prepack": "npm run build",
         "start": "nodemon",
         "test": "nyc mocha --exit -r ts-node/register -r source-map-support/register -r dotenv/config ./test/test.ts",
