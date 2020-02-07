@@ -89,3 +89,11 @@ Promise.resolve()
         worqr3.startWork(queueName)
     ]))
     .catch(console.error);
+
+process.on('SIGINT', () => {
+    Promise.all([
+        worqr1.failWorker(),
+        worqr2.failWorker(),
+        worqr3.failWorker()
+    ]).then(() => process.exit());
+});

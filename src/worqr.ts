@@ -33,12 +33,8 @@ interface WorkerStatus {
 export class Worqr extends EventEmitter {
     /** The publish connection. */
     private pub: redis.RedisClient;
-    /** Whether the publish connection is managed by Worqr or the client. */
-    private pubIsLocal = false;
     /** The subscribe connection. */
     private sub: redis.RedisClient;
-    /** Whether the subscribe connection is managed by Worqr or the client. */
-    private subIsLocal = false;
     /** The prefix to use in redis. */
     private redisKeyPrefix = 'worqr';
     /** The unique ID of this instance. */
@@ -89,7 +85,6 @@ export class Worqr extends EventEmitter {
                 this.pub.auth(password);
             }
             this.pub.on('error', error => this.emit('error', error));
-            this.pubIsLocal = true;
         }
         if (redisOptions.subscribe) {
             this.sub = redisOptions.subscribe;
@@ -110,7 +105,6 @@ export class Worqr extends EventEmitter {
                 const type = unprefixedChannel.substr(lastUnderscore + 1);
                 this.emit(queueName, type, message);
             });
-            this.subIsLocal = true;
         }
         this.redisKeyPrefix = (worqrOptions && worqrOptions.redisKeyPrefix) || this.redisKeyPrefix;
         this.workerId = (worqrOptions && worqrOptions.workerId) || this.workerId;
@@ -681,8 +675,6 @@ export class Worqr extends EventEmitter {
 
     /**
      * Fails a worker, putting all its tasks back on the queues they came from.
-     * WARNING: Once failed, the worker is in an unusable state and should be garbage collected (or already should have been destroyed somehow).
-     * Create a new instance instead of trying to restart the failed one.
      * @param workerId The worker ID (ID of the instance if unspecified).
      */
     public failWorker(workerId: string = this.workerId): Promise<void> {
@@ -724,17 +716,6 @@ export class Worqr extends EventEmitter {
                                 this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
                                 this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
                             });
-                            if (this.workerTimerIntervalId) {
-                                clearInterval(this.workerTimerIntervalId);
-                            }
-                            if (this.pubIsLocal) {
-                                this.pub.end(true);
-                                this.pub = undefined as any;
-                            }
-                            if (!this.subIsLocal) {
-                                this.sub.end(true);
-                                this.sub = undefined as any;
-                            }
                         }
                         resolve();
                     });

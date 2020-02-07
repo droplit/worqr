@@ -32,3 +32,7 @@ const worqr = new Worqr({ host, port, password }, { redisKeyPrefix });
         createRandomTask();
     }, Math.random() * 5000);
 })();
+
+process.on('SIGINT', () => {
+    worqr.failWorker().then(() => process.exit());
+});
