@@ -1,6 +1,5 @@
+import debug from 'debug';
 import { Worqr } from '../src';
-
-const log = require('debug')('worqr:example:pub');
 
 const host = process.env.REDIS_HOST as string;
 const port = Number(process.env.REDIS_PORT as string);
@@ -10,6 +9,7 @@ const queueName = 'queue';
 
 // responsible for putting tasks on the queue periodically
 const worqr = new Worqr({ host, port, password }, { redisKeyPrefix });
+const worqrLog = debug(`worqr:${worqr.getWorkerId()}`);
 
 (function createRandomTask() {
     setTimeout(() => {
@@ -26,7 +26,7 @@ const worqr = new Worqr({ host, port, password }, { redisKeyPrefix });
             worqr.enqueue(queueName, tasks)
         ])
             .then(() => {
-                log(`${worqr.getWorkerId()}: sucessfully enqueued tasks`);
+                worqrLog(`sucessfully enqueued tasks`);
             })
             .catch(console.error);
         createRandomTask();

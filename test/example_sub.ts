@@ -1,6 +1,5 @@
+import debug from 'debug';
 import { Worqr } from '../src';
-
-const log = require('debug')('worqr:example:sub');
 
 const host = process.env.REDIS_HOST as string;
 const port = Number(process.env.REDIS_PORT as string);
@@ -9,32 +8,42 @@ const redisKeyPrefix = 'worqr.example';
 const queueName = 'queue';
 
 // workers to pull work off of the queue
-const worqr1 = new Worqr({ host, port, password }, { redisKeyPrefix });
-const worqr2 = new Worqr({ host, port, password }, { redisKeyPrefix });
-const worqr3 = new Worqr({ host, port, password }, { redisKeyPrefix });
+const worqr1 = new Worqr({ host, port, password }, { redisKeyPrefix, debugMode: true });
+const worqr1Log = debug(`worqr:${worqr1.getWorkerId()}`);
+worqr1.on(queueName, (type: string, message: string) => handleEvent(worqr1, worqr1Log, type, message));
+worqr1.on('debug', event => worqr1Log(`DEBUG: %O`, event));
+worqr1.on('error', err => worqr1Log(`ERROR: %O`, err));
 
-worqr1.on(queueName, (type: string, message: string) => handleEvent(worqr1, type, message));
-worqr2.on(queueName, (type: string, message: string) => handleEvent(worqr2, type, message));
-worqr3.on(queueName, (type: string, message: string) => handleEvent(worqr3, type, message));
+const worqr2 = new Worqr({ host, port, password }, { redisKeyPrefix, debugMode: true });
+const worqr2Log = debug(`worqr:${worqr2.getWorkerId()}`);
+worqr2.on(queueName, (type: string, message: string) => handleEvent(worqr2, worqr2Log, type, message));
+worqr2.on('debug', event => worqr2Log(`DEBUG: %O`, event));
+worqr2.on('error', err => worqr2Log(`ERROR: %O`, err));
 
-function handleEvent(worqr: Worqr, type: string, message: string) {
+const worqr3 = new Worqr({ host, port, password }, { redisKeyPrefix, debugMode: true });
+const worqr3Log = debug(`worqr:${worqr3.getWorkerId()}`);
+worqr3.on(queueName, (type: string, message: string) => handleEvent(worqr3, worqr3Log, type, message));
+worqr3.on('debug', event => worqr3Log(`DEBUG: %O`, event));
+worqr3.on('error', err => worqr3Log(`ERROR: %O`, err));
+
+function handleEvent(worqr: Worqr, worqrLog: debug.Debugger, type: string, message: string) {
     switch (type) {
         // indicates that work has been added to the queue
         // the worker should start a task on the queue
         case 'work': {
             const count = Number(message);
-            log(`${worqr.getWorkerId()}: ${count} tasks have been added to ${queueName}`);
+            worqrLog(`${count} tasks have been added to ${queueName}`);
             for (let i = 0; i < count; i++) {
                 Promise.resolve()
                     .then(() => worqr.dequeue(queueName))
                     .then(process => {
                         if (!process) {
-                            return log(`${worqr.getWorkerId()}: did not get any tasks`);
+                            return worqrLog(`did not get any tasks`);
                         }
-                        log(`${worqr.getWorkerId()}: doing ${process.task}`);
+                        worqrLog(`doing ${process.task}`);
                         // simulate a long async task
                         setTimeout(() => {
-                            log(`${worqr.getWorkerId()}: finished ${process.task}`);
+                            worqrLog(`finished ${process.task}`);
                             worqr.finishProcess(process.id, `${process.task} completed`);
                             // ask for more work
                             worqr.requestWork(queueName);
@@ -47,7 +56,7 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
         // indicates that a task was finished by anybody
         case 'done': {
             const { workerId, task, result } = JSON.parse(message) as { workerId: string, task: string, result: any };
-            log(`${worqr.getWorkerId()}: ${workerId} finished ${task} with result: ${result}`);
+            worqrLog(`${workerId} finished ${task} with result: ${result}`);
             break;
         }
         // indicates that a certain task has been cancelled
@@ -57,7 +66,7 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
             Promise.resolve()
                 .then(() => worqr.getMatchingProcesses(task))
                 .then(processIds => Promise.all(processIds.map(processId => {
-                    log(`${worqr.getWorkerId()}: stopping ${processId}`);
+                    worqrLog(`stopping ${processId}`);
                     return worqr.stopProcess(processId);
                 })))
                 .catch(console.error);
@@ -69,7 +78,7 @@ function handleEvent(worqr: Worqr, type: string, message: string) {
             Promise.resolve()
                 .then(() => worqr.stopWork(queueName))
                 .then(() => {
-                    log(`${worqr.getWorkerId()}: stopped work on ${queueName}`);
+                    worqrLog(`stopped work on ${queueName}`);
                 })
                 .catch(console.error);
             break;

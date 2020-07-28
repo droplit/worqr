@@ -65,6 +65,12 @@ export class Worqr extends EventEmitter {
     private workingQueues: string;
     /** Working process prefix. */
     private workingProcesses: string;
+    /** Run the worker in debug mode to gather performance metrics. */
+    private debugMode = false;
+    /** How often (in milliseconds) to emit debug events in debug mode. */
+    private debugInterval = 1000;
+    /** Debug information for this worker. */
+    private debugInfo: any = {};
 
     /**
      * Creates a Worqr instance.
@@ -120,6 +126,25 @@ export class Worqr extends EventEmitter {
         this.workerTimers = `${this.redisKeyPrefix}:workerTimers`;
         this.workingQueues = `${this.redisKeyPrefix}:workingQueues`;
         this.workingProcesses = `${this.redisKeyPrefix}:workingProcesses`;
+        this.debugMode = (worqrOptions && worqrOptions.debugMode) || this.debugMode;
+        this.debugInterval = (worqrOptions && worqrOptions.debugInterval) || this.debugInterval;
+
+        if (this.debugMode) {
+            setInterval(() => {
+                this.debugInfo.jobs = this.debugInfo.jobs || {};
+                const jobs = { ...this.debugInfo.jobs };
+                Object.keys(jobs).forEach(processId => {
+                    const job = jobs[processId];
+                    jobs[processId] = {
+                        time: Date.now() - job.start,
+                    };
+                });
+                this.emit('debug', {
+                    jobCount: Object.keys(jobs).length,
+                    jobs,
+                });
+            }, this.debugInterval);
+        }
 
         setInterval(() => {
             this.cleanupWorkers();
@@ -355,6 +380,12 @@ export class Worqr extends EventEmitter {
                                 return reject(new Error('Failed to exec multi'));
                             }
                             const [task] = results;
+                            if (this.debugMode) {
+                                this.debugInfo.jobs = this.debugInfo.jobs || {};
+                                this.debugInfo.jobs[processId] = {
+                                    start: Date.now(),
+                                };
+                            }
                             resolve({ id: processId, task });
                         });
                 }))
@@ -368,6 +399,10 @@ export class Worqr extends EventEmitter {
                             .exec(err => {
                                 if (err) {
                                     return reject(err);
+                                }
+                                if (this.debugMode) {
+                                    this.debugInfo.jobs = this.debugInfo.jobs || {};
+                                    delete this.debugInfo.jobs[processId];
                                 }
                                 resolve(null);
                             });
@@ -476,6 +511,10 @@ export class Worqr extends EventEmitter {
                             message.result = result;
                         }
                         this.pub.publish(`${this.redisKeyPrefix}_${queueName}_done`, JSON.stringify(message));
+                        if (this.debugMode) {
+                            this.debugInfo.jobs = this.debugInfo.jobs || {};
+                            delete this.debugInfo.jobs[processId];
+                        }
                         resolve();
                     });
             });

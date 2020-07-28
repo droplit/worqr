@@ -32,6 +32,10 @@ export interface WorqrOptions {
     workerTimeout?: number;
     /** How often (in milliseconds) to check for dead workers. Defaults to `10000`. */
     workerCleanupInterval?: number;
+    /** Run the worker in debug mode to gather performance metrics. Defaults to `false`. */
+    debugMode?: boolean;
+    /** How often (in milliseconds) to emit debug events in debug mode. Defaults to `1000`. */
+    debugInterval?: number;
 }
 
 /**
