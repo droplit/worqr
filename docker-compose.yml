@@ -1,0 +1,30 @@
+version: "3"
+services:
+  worqr:
+    container_name: worqr-test
+    build: ./
+    hostname: "worqr"
+    links:
+      - "redis"
+    networks:
+      - redis
+    environment: 
+      DEBUG: "worqr*"
+      REDIS_HOST: redis-azure
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: TEST_PASSWORD
+  redis:
+    container_name: redis-azure
+    hostname: "redis-azure"
+    command: redis-server --requirepass TEST_PASSWORD
+    image: redis:4.0.14
+    ports:
+      # HOST:CONTAINER
+      - "6379:6379"
+    networks:
+      - redis
+    restart: unless-stopped
+
+networks:
+  redis:
+    driver: bridge

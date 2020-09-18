@@ -5,7 +5,7 @@
 Install dependencies
 
 ```
-npm install
+yarn
 ```
 
 Create `.env` file and input environment variables. See `.example.env for reference`.
@@ -19,7 +19,14 @@ npm run tslint
 ### Run tests
 
 ```
-npm test
+yarn test
+```
+
+### Run tests with docker environment
+
+```
+docker-compose build
+docker-compose up
 ```
 
 ### Run example
@@ -35,5 +42,5 @@ npm run example
 Build and transpile TS
 
 ```
-npm run build
+yarn build
 ```

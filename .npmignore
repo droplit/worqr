@@ -11,3 +11,8 @@ nodemon.json
 *.env
 *.env.txt
 develop.md
+
+# Docker
+.dockerignore
+dockerfile
+docker-compose.yml
