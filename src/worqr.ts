@@ -79,6 +79,7 @@ export class Worqr extends EventEmitter {
      */
     public constructor(redisOptions: RedisOptions, worqrOptions?: WorqrOptions) {
         super();
+
         if (redisOptions.data) {
             this.pub = redisOptions.data;
         } else {
@@ -90,8 +91,9 @@ export class Worqr extends EventEmitter {
             if (password) {
                 this.pub.auth(password);
             }
-            this.pub.on('error', error => this.emit('error', error));
         }
+        this.pub.on('error', error => this.emit('error', error));
+
         if (redisOptions.subscribe) {
             this.sub = redisOptions.subscribe;
         } else {
@@ -103,15 +105,16 @@ export class Worqr extends EventEmitter {
             if (password) {
                 this.sub.auth(password);
             }
-            this.sub.on('error', error => this.emit('error', error));
-            this.sub.on('message', (channel, message) => {
-                const unprefixedChannel = channel.substr(channel.indexOf('_') + 1);
-                const lastUnderscore = unprefixedChannel.lastIndexOf('_');
-                const queueName = unprefixedChannel.substr(0, lastUnderscore);
-                const type = unprefixedChannel.substr(lastUnderscore + 1);
-                this.emit(queueName, type, message);
-            });
         }
+        this.sub.on('error', error => this.emit('error', error));
+        this.sub.on('message', (channel: string, message: string) => {
+            const unprefixedChannel = channel.substr(channel.indexOf('_') + 1);
+            const lastUnderscore = unprefixedChannel.lastIndexOf('_');
+            const queueName = unprefixedChannel.substr(0, lastUnderscore);
+            const type = unprefixedChannel.substr(lastUnderscore + 1);
+            this.emit(queueName, type, message);
+        });
+
         this.redisKeyPrefix = (worqrOptions && worqrOptions.redisKeyPrefix) || this.redisKeyPrefix;
         this.workerId = (worqrOptions && worqrOptions.workerId) || this.workerId;
         this.workerHeartbeatInterval = (worqrOptions && worqrOptions.workerHeartbeatInterval) || this.workerHeartbeatInterval;
