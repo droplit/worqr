@@ -56,7 +56,7 @@
         "@types/redis": "^2.8.6",
         "@types/uuid": "^3.4.3",
         "debug": "^3.1.0",
-        "redis": "^2.8.0",
+        "redis": "^3.1.1",
         "uuid": "^3.3.2"
     },
     "devDependencies": {
