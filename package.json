@@ -1,6 +1,6 @@
 {
     "name": "worqr",
-    "version": "1.2.3",
+    "version": "2.0.0",
     "description": "A distributed, reliable, atomic, work queueing system that only requires redis as the backend.",
     "desqription": "Worqr does all ur worq. I can haz worq? No... All ur worq are belong to worqr.",
     "keywords": [
@@ -27,13 +27,13 @@
     "main": "dist/index",
     "types": "dist/index",
     "scripts": {
-        "build": "npm run tslint && tsc -b -v",
+        "build": "run lint && tsc -b -v",
         "docs": "typedoc --excludePrivate --out docs src",
         "example_pub": "ts-node -r dotenv/config ./test/example_pub.ts",
         "example_sub": "ts-node -r dotenv/config ./test/example_sub.ts",
-        "prepack": "npm run build",
+        "prepack": "run build",
         "test": "nyc mocha --exit -r ts-node/register -r source-map-support/register -r dotenv/config ./test/test.ts",
-        "tslint": "tslint -t stylish 'src/**/*.ts' --force"
+        "lint": "eslint 'src/**/*.ts'"
     },
     "author": "Droplit, Inc. (https://droplit.io)",
     "contributors": [
@@ -56,22 +56,24 @@
         "@types/redis": "^2.8.6",
         "@types/uuid": "^3.4.3",
         "debug": "^3.1.0",
-        "redis": "^2.8.0",
+        "redis": "^4.2.0",
         "uuid": "^3.3.2"
     },
     "devDependencies": {
         "@types/chai": "^4.1.4",
         "@types/mocha": "^5.2.5",
-        "@types/node": "^9.4.6",
+        "@types/node": "^16.0.0",
+        "@typescript-eslint/eslint-plugin": "^5.30.5",
+        "@typescript-eslint/parser": "^5.30.5",
         "chai": "^4.1.2",
         "dotenv": "^5.0.1",
+        "eslint": "^8.19.0",
         "mocha": "^5.2.0",
         "nyc": "^14.1.1",
         "source-map-support": "^0.5.13",
         "ts-node": "^6.1.0",
-        "tslint": "^5.11.0",
         "typedoc": "^0.13.0",
-        "typescript": "^4.0.2"
+        "typescript": "^4.7.4"
     },
     "nyc": {
         "extension": [
@@ -79,8 +81,10 @@
             ".tsx"
         ],
         "exclude": [
-            "**/*.d.ts"
+            "**/*.d.ts",
+            ".yarn"
         ],
         "all": true
-    }
+    },
+    "packageManager": "yarn@3.2.1"
 }

@@ -12,6 +12,9 @@ nodemon.json
 *.env.txt
 develop.md
 
+# Yarn
+.yarn
+
 # Docker
 .dockerignore
 dockerfile

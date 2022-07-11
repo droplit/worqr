@@ -1,6 +1,15 @@
 # MacOS
 .DS_Store
 
+# Yarn
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+
 # Project
 node_modules
 dist

@@ -1,14 +1,22 @@
 import debug from 'debug';
 import { Worqr } from '../src';
 
-const host = process.env.REDIS_HOST as string;
-const port = Number(process.env.REDIS_PORT as string);
-const password = process.env.REDIS_PASSWORD as string;
-const redisKeyPrefix = 'worqr.example';
 const queueName = 'queue';
 
+const options = {
+    redis: {
+        redisClientOptions: {
+            url: process.env.REDIS_URL,
+            password: process.env.REDIS_PASSWORD
+        }
+    },
+    worqr: {
+        redisKeyPrefix: 'worqr.example'
+    }
+}
+
 // responsible for putting tasks on the queue periodically
-const worqr = new Worqr({ host, port, password }, { redisKeyPrefix });
+const worqr = new Worqr(options);
 const worqrLog = debug(`worqr:${worqr.getWorkerId()}`);
 
 (function createRandomTask() {

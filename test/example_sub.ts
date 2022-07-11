@@ -1,26 +1,34 @@
 import debug from 'debug';
 import { Worqr } from '../src';
 
-const host = process.env.REDIS_HOST as string;
-const port = Number(process.env.REDIS_PORT as string);
-const password = process.env.REDIS_PASSWORD as string;
-const redisKeyPrefix = 'worqr.example';
 const queueName = 'queue';
 
+const options = {
+    redis: {
+        redisClientOptions: {
+            url: process.env.REDIS_URL,
+            password: process.env.REDIS_PASSWORD
+        }
+    },
+    worqr: {
+        redisKeyPrefix: 'worqr.example'
+    }
+}
+
 // workers to pull work off of the queue
-const worqr1 = new Worqr({ host, port, password }, { redisKeyPrefix, debugMode: true });
+const worqr1 = new Worqr(options);
 const worqr1Log = debug(`worqr:${worqr1.getWorkerId()}`);
 worqr1.on(queueName, (type: string, message: string) => handleEvent(worqr1, worqr1Log, type, message));
 worqr1.on('debug', event => worqr1Log(`DEBUG: %O`, event));
 worqr1.on('error', err => worqr1Log(`ERROR: %O`, err));
 
-const worqr2 = new Worqr({ host, port, password }, { redisKeyPrefix, debugMode: true });
+const worqr2 = new Worqr(options);
 const worqr2Log = debug(`worqr:${worqr2.getWorkerId()}`);
 worqr2.on(queueName, (type: string, message: string) => handleEvent(worqr2, worqr2Log, type, message));
 worqr2.on('debug', event => worqr2Log(`DEBUG: %O`, event));
 worqr2.on('error', err => worqr2Log(`ERROR: %O`, err));
 
-const worqr3 = new Worqr({ host, port, password }, { redisKeyPrefix, debugMode: true });
+const worqr3 = new Worqr(options);
 const worqr3Log = debug(`worqr:${worqr3.getWorkerId()}`);
 worqr3.on(queueName, (type: string, message: string) => handleEvent(worqr3, worqr3Log, type, message));
 worqr3.on('debug', event => worqr3Log(`DEBUG: %O`, event));
