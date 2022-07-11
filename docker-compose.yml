@@ -8,10 +8,9 @@ services:
       - "redis"
     networks:
       - redis
-    environment: 
+    environment:
       DEBUG: "worqr*"
-      REDIS_HOST: redis-azure
-      REDIS_PORT: 6379
+      REDIS_URL: redis://redis-azure:6379
       REDIS_PASSWORD: TEST_PASSWORD
   redis:
     container_name: redis-azure

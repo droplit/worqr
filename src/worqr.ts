@@ -3,38 +3,22 @@ import debug from 'debug';
 import { EventEmitter } from 'events';
 import * as redis from 'redis';
 import * as uuid from 'uuid';
-import { Process, RedisOptions, WorqrOptions } from './types';
+import { Process, Options } from './types';
 
 const log = debug('worqr');
 
-/**
- * Represents queues and processes that this worker is working on.
- */
-interface WorkerItems {
-    /** The queue names. */
-    queueNames: string[];
-    /** The process IDs */
-    processIds: string[];
-}
-
-/**
- * Represents whether a worker is dead.
- */
-interface WorkerStatus {
-    /** The unique worker ID. */
-    workerId: string;
-    /** The worker status. */
-    dead: boolean;
-}
+const WORKER_RUN_KEY = 'RUN';
 
 /**
  * A distributed, reliable, job queueing system that uses redis as a backend.
  */
 export class Worqr extends EventEmitter {
+    /** Options given to constructor */
+    private options: Options;
     /** The publish connection. */
-    private pub: redis.RedisClient;
+    private pub: ReturnType<typeof redis.createClient>;
     /** The subscribe connection. */
-    private sub: redis.RedisClient;
+    private sub: ReturnType<typeof redis.createClient>;
     /** The prefix to use in redis. */
     private redisKeyPrefix = 'worqr';
     /** The unique ID of this instance. */
@@ -47,6 +31,7 @@ export class Worqr extends EventEmitter {
     private workerCleanupInterval = 10000;
     /** The NodeJS timer for the heartbeat. */
     private workerTimerIntervalId?: NodeJS.Timer;
+
     /** Queue prefix. */
     private queues: string;
     /** Unique task prefix. */
@@ -65,61 +50,35 @@ export class Worqr extends EventEmitter {
     private workingQueues: string;
     /** Working process prefix. */
     private workingProcesses: string;
+
     /** Run the worker in debug mode to gather performance metrics. */
     private debugMode = false;
     /** How often (in milliseconds) to emit debug events in debug mode. */
     private debugInterval = 1000;
     /** Debug information for this worker. */
-    private debugInfo: any = {};
+    private debugInfo: { jobs?: Record<string, { time?: number, start: number }> } = {};
 
     /**
      * Creates a Worqr instance.
-     * @param redisOptions Connection information for redis.
-     * @param worqrOptions Settings for the worqr instance.
+     * @param options
      */
-    public constructor(redisOptions: RedisOptions, worqrOptions?: WorqrOptions) {
+    constructor(options: Options) {
         super();
 
-        if (redisOptions.data) {
-            this.pub = redisOptions.data;
-        } else {
-            const { host, port, password } = redisOptions;
-            if (!host || !port) {
-                throw new Error('Host and port must be specified for redis data client');
-            }
-            this.pub = redis.createClient(redisOptions);
-            if (password) {
-                this.pub.auth(password);
-            }
-        }
+        this.options = options;
+
+        this.pub = options.redis?.data || redis.createClient(options.redis?.redisClientOptions);
         this.pub.on('error', error => this.emit('error', error));
 
-        if (redisOptions.subscribe) {
-            this.sub = redisOptions.subscribe;
-        } else {
-            const { host, port, password } = redisOptions;
-            if (!host || !port) {
-                throw new Error('Host and port must be specified for redis subscribe client');
-            }
-            this.sub = redis.createClient(redisOptions);
-            if (password) {
-                this.sub.auth(password);
-            }
-        }
+        this.sub = options.redis?.subscribe || redis.createClient(options.redis?.redisClientOptions);
         this.sub.on('error', error => this.emit('error', error));
-        this.sub.on('message', (channel: string, message: string) => {
-            const unprefixedChannel = channel.substr(channel.indexOf('_') + 1);
-            const lastUnderscore = unprefixedChannel.lastIndexOf('_');
-            const queueName = unprefixedChannel.substr(0, lastUnderscore);
-            const type = unprefixedChannel.substr(lastUnderscore + 1);
-            this.emit(queueName, type, message);
-        });
 
-        this.redisKeyPrefix = (worqrOptions && worqrOptions.redisKeyPrefix) || this.redisKeyPrefix;
-        this.workerId = (worqrOptions && worqrOptions.workerId) || this.workerId;
-        this.workerHeartbeatInterval = (worqrOptions && worqrOptions.workerHeartbeatInterval) || this.workerHeartbeatInterval;
-        this.workerTimeout = (worqrOptions && worqrOptions.workerTimeout) || this.workerTimeout;
-        this.workerCleanupInterval = (worqrOptions && worqrOptions.workerCleanupInterval) || this.workerCleanupInterval;
+        this.redisKeyPrefix = options.worqr?.redisKeyPrefix || this.redisKeyPrefix;
+        this.workerId = options.worqr?.workerId || this.workerId;
+        this.workerHeartbeatInterval = options.worqr?.workerHeartbeatInterval || this.workerHeartbeatInterval;
+        this.workerTimeout = options.worqr?.workerTimeout || this.workerTimeout;
+        this.workerCleanupInterval = options.worqr?.workerCleanupInterval || this.workerCleanupInterval;
+
         this.queues = `${this.redisKeyPrefix}:queues`;
         this.uniqueTasks = `${this.redisKeyPrefix}:uniqueTasks`;
         this.processes = `${this.redisKeyPrefix}:processes`;
@@ -129,8 +88,16 @@ export class Worqr extends EventEmitter {
         this.workerTimers = `${this.redisKeyPrefix}:workerTimers`;
         this.workingQueues = `${this.redisKeyPrefix}:workingQueues`;
         this.workingProcesses = `${this.redisKeyPrefix}:workingProcesses`;
-        this.debugMode = (worqrOptions && worqrOptions.debugMode) || this.debugMode;
-        this.debugInterval = (worqrOptions && worqrOptions.debugInterval) || this.debugInterval;
+
+        this.debugMode = options.worqr?.debugMode || this.debugMode;
+        this.debugInterval = options.worqr?.debugInterval || this.debugInterval;
+    }
+
+    public async init() {
+        if (!this.options.redis?.data)
+            await this.pub.connect();
+        if (!this.options.redis?.subscribe)
+            await this.sub.connect();
 
         if (this.debugMode) {
             setInterval(() => {
@@ -139,6 +106,7 @@ export class Worqr extends EventEmitter {
                 Object.keys(jobs).forEach(processId => {
                     const job = jobs[processId];
                     jobs[processId] = {
+                        start: job.start,
                         time: Date.now() - job.start,
                     };
                 });
@@ -154,21 +122,22 @@ export class Worqr extends EventEmitter {
         }, this.workerCleanupInterval);
     }
 
+    private onMessage(message: string, channel: string) {
+        const unprefixedChannel = channel.substring(channel.indexOf('_') + 1);
+        const lastUnderscore = unprefixedChannel.lastIndexOf('_');
+        const queueName = unprefixedChannel.substring(0, lastUnderscore);
+        const type = unprefixedChannel.substring(lastUnderscore + 1);
+        this.emit(queueName, type, message);
+    }
+
     // #region Queues
 
     /**
      * Returns a list of all queues.
      * @returns The queue names.
      */
-    public getQueues(): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.pub.keys(`${this.queues}*`, (err, queueNames) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(queueNames.map(queueName => queueName.split(':')[2]));
-            });
-        });
+    public async getQueues() {
+        return (await this.pub.keys(`${this.queues}*`)).map(queueName => queueName.split(':')[2]);
     }
 
     /**
@@ -176,15 +145,8 @@ export class Worqr extends EventEmitter {
      * @param workerId The worker ID (ID of the instance if unspecified).
      * @returns The queue names.
      */
-    private getWorkingQueues(workerId: string = this.workerId): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.pub.smembers(`${this.workingQueues}:${workerId}`, (err, queueNames) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(queueNames);
-            });
-        });
+    private async getWorkingQueues(workerId: string = this.workerId) {
+        return this.pub.sMembers(`${this.workingQueues}:${workerId}`);
     }
 
     /**
@@ -192,15 +154,8 @@ export class Worqr extends EventEmitter {
      * @param queueName The name of the queue.
      * @returns The next task.
      */
-    public peekQueue(queueName: string): Promise<string> {
-        return new Promise((resolve, reject) => {
-            this.pub.lindex(`${this.queues}:${queueName}`, -1, (err, task) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(task);
-            });
-        });
+    public async peekQueue(queueName: string) {
+        return this.pub.lIndex(`${this.queues}:${queueName}`, -1);
     }
 
     /**
@@ -208,15 +163,8 @@ export class Worqr extends EventEmitter {
      * @param queueName The name of the queue.
      * @returns The number of tasks.
      */
-    public countQueue(queueName: string): Promise<number> {
-        return new Promise((resolve, reject) => {
-            this.pub.llen(`${this.queues}:${queueName}`, (err, len) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(len);
-            });
-        });
+    public async countQueue(queueName: string) {
+        return this.pub.lLen(`${this.queues}:${queueName}`);
     }
 
     /**
@@ -224,19 +172,12 @@ export class Worqr extends EventEmitter {
      * Clients should listen for this event and stop work on the queue.
      * @param queueName The name of the queue.
      */
-    public deleteQueue(queueName: string): Promise<void> {
+    public async deleteQueue(queueName: string) {
         log(`deleting ${queueName}`);
-        return new Promise((resolve, reject) => {
-            this.pub.multi()
-                .del(`${this.queues}:${queueName}`)
-                .publish(`${this.redisKeyPrefix}_${queueName}_delete`, '')
-                .exec(err => {
-                    if (err) {
-                        return reject(err);
-                    }
-                    resolve();
-                });
-        });
+        return this.pub.multi()
+            .del(`${this.queues}:${queueName}`)
+            .publish(`${this.redisKeyPrefix}_${queueName}_delete`, '')
+            .exec();
     }
 
     // #endregion
@@ -253,49 +194,30 @@ export class Worqr extends EventEmitter {
      * A queue can consist of a mix of unique and non-unique tasks.
      * Enqueueing a unique task that matches a non-unique task will NOT reject.
      */
-    public enqueue(queueName: string, task: string | string[], unique: boolean = false): Promise<void> {
+    public async enqueue(queueName: string, task: string | string[], unique = false) {
         log(`queueing ${task.toString()} to ${queueName}`);
-        return new Promise((resolve, reject) => {
-            if (unique) {
-                if (Array.isArray(task)) {
-                    return reject(new Error('Unique task array not currently supported'));
-                }
-                const taskHash = crypto.createHash('md5').update(task || '').digest('hex').toString();
-                this.pub.watch(`${this.uniqueTasks}:${taskHash}`, err => {
-                    if (err) {
-                        return reject(err);
-                    }
-                    this.pub.get(`${this.uniqueTasks}:${taskHash}`, (err, existingTask) => {
-                        if (err) {
-                            return reject(err);
-                        }
-                        if (existingTask) {
-                            return reject(new Error('Trying to enqueue duplicate task in unique queue'));
-                        }
-                        this.pub.multi()
-                            .set(`${this.uniqueTasks}:${taskHash}`, ' ')
-                            .lpush(`${this.queues}:${queueName}`, task)
-                            .publish(`${this.redisKeyPrefix}_${queueName}_work`, '1')
-                            .exec(err => {
-                                if (err) {
-                                    return reject(err);
-                                }
-                                resolve();
-                            });
-                    });
-                });
-            } else {
-                this.pub.multi()
-                    .lpush(`${this.queues}:${queueName}`, task)
-                    .publish(`${this.redisKeyPrefix}_${queueName}_work`, Array.isArray(task) ? task.length.toString() : '1')
-                    .exec(err => {
-                        if (err) {
-                            return reject(err);
-                        }
-                        resolve();
-                    });
-            }
-        });
+
+        if (!unique) {
+            await this.pub.multi()
+                .lPush(`${this.queues}:${queueName}`, task)
+                .publish(`${this.redisKeyPrefix}_${queueName}_work`, Array.isArray(task) ? task.length.toString() : '1')
+                .exec();
+            return;
+        }
+        if (Array.isArray(task)) {
+            throw new Error('Unique task array not currently supported');
+        }
+        const taskHash = crypto.createHash('md5').update(task || '').digest('hex').toString();
+
+        await this.pub.watch(`${this.uniqueTasks}:${taskHash}`);
+        const existingTask = await this.pub.get(`${this.uniqueTasks}:${taskHash}`);
+        if (existingTask) throw new Error('Trying to enqueue duplicate task in unique queue');
+
+        await this.pub.multi()
+            .set(`${this.uniqueTasks}:${taskHash}`, ' ')
+            .lPush(`${this.queues}:${queueName}`, task)
+            .publish(`${this.redisKeyPrefix}_${queueName}_work`, '1')
+            .exec();
     }
 
     /**
@@ -303,15 +225,8 @@ export class Worqr extends EventEmitter {
      * @param queueName The name of the queue.
      * @returns The tasks.
      */
-    public getTasks(queueName: string): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.pub.lrange(`${this.queues}:${queueName}`, 0, -1, (err, tasks) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(tasks);
-            });
-        });
+    public async getTasks(queueName: string) {
+        return this.pub.lRange(`${this.queues}:${queueName}`, 0, -1);
     }
 
     /**
@@ -319,15 +234,8 @@ export class Worqr extends EventEmitter {
      * @param queueName The process ID.
      * @returns The task.
      */
-    private getTaskForProcess(processId: string): Promise<string> {
-        return new Promise((resolve, reject) => {
-            this.pub.lindex(`${this.processes}:${processId}`, 0, (err, task) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(task);
-            });
-        });
+    private async getTaskForProcess(processId: string) {
+        return this.pub.lIndex(`${this.processes}:${processId}`, 0);
     }
 
     /**
@@ -336,19 +244,12 @@ export class Worqr extends EventEmitter {
      * @param queueName The name of the queue.
      * @param task The task to cancel.
      */
-    public cancelTasks(queueName: string, task: string): Promise<void> {
+    public async cancelTasks(queueName: string, task: string) {
         log(`canceling ${task} on ${queueName}`);
-        return new Promise((resolve, reject) => {
-            this.pub.multi()
-                .lrem(`${this.queues}:${queueName}`, 0, task)
-                .publish(`${this.redisKeyPrefix}_${queueName}_cancel`, task)
-                .exec(err => {
-                    if (err) {
-                        return reject(err);
-                    }
-                    resolve();
-                });
-        });
+        await this.pub.multi()
+            .lRem(`${this.queues}:${queueName}`, 0, task)
+            .publish(`${this.redisKeyPrefix}_${queueName}_cancel`, task)
+            .exec();
     }
 
     // #endregion
@@ -362,74 +263,56 @@ export class Worqr extends EventEmitter {
      * @param queueName The name of the queue.
      * @returns A process (null if there is no task).
      */
-    public dequeue(queueName: string): Promise<Process | null> {
+    public async dequeue(queueName: string): Promise<Process | null> {
         log(`${this.workerId} starting task on ${queueName}`);
-        return new Promise((resolve, reject) => {
-            Promise.resolve()
-                .then(() => this.isWorking(this.workerId, queueName))
-                .then(isWorking => new Promise<Process>((resolve, reject) => {
-                    if (!isWorking) {
-                        return reject(`${this.workerId} is not working on ${queueName}`);
-                    }
-                    const processId = `${queueName}_${uuid.v4()}`;
-                    this.pub.multi()
-                        .rpoplpush(`${this.queues}:${queueName}`, `${this.processes}:${processId}`)
-                        .sadd(`${this.workingProcesses}:${queueName}`, processId)
-                        .exec((err, results) => {
-                            if (err) {
-                                return reject(err);
-                            }
-                            if (!results) {
-                                return reject(new Error('Failed to exec multi'));
-                            }
-                            const [task] = results;
-                            if (this.debugMode) {
-                                this.debugInfo.jobs = this.debugInfo.jobs || {};
-                                this.debugInfo.jobs[processId] = {
-                                    start: Date.now(),
-                                };
-                            }
-                            resolve({ id: processId, task });
-                        });
-                }))
-                .then(process => {
-                    if (process.task === null) {
-                        const processId = process.id;
-                        this.pub.multi()
-                            .rpoplpush(`${this.processes}:${processId}`, `${this.queues}:${queueName}`)
-                            .del(`${this.processes}:${processId}`)
-                            .srem(`${this.workingProcesses}:${queueName}`, process.id)
-                            .exec(err => {
-                                if (err) {
-                                    return reject(err);
-                                }
-                                if (this.debugMode) {
-                                    this.debugInfo.jobs = this.debugInfo.jobs || {};
-                                    delete this.debugInfo.jobs[processId];
-                                }
-                                resolve(null);
-                            });
-                    } else {
-                        resolve(process);
-                    }
-                })
-                .catch(err => reject(err));
-        });
+
+        const isWorking = await this.isWorking(this.workerId, queueName)
+        if (!isWorking) {
+            throw new Error(`${this.workerId} is not working on ${queueName}`);
+        }
+
+        const processId = `${queueName}_${uuid.v4()}`;
+
+        const results = await this.pub.multi()
+            .rPopLPush(`${this.queues}:${queueName}`, `${this.processes}:${processId}`)
+            .sAdd(`${this.workingProcesses}:${queueName}`, processId)
+            .exec();
+
+        if (!results) {
+            throw new Error('Failed to exec multi');
+        }
+        const [task] = results;
+        if (this.debugMode) {
+            this.debugInfo.jobs = this.debugInfo.jobs || {};
+            this.debugInfo.jobs[processId] = {
+                start: Date.now(),
+            };
+        }
+        if (task) {
+            const process: Process = ({ id: processId, task: task.toString() });
+            return process;
+        }
+
+        // Queue empty
+        await this.pub.multi()
+            .rPopLPush(`${this.processes}:${processId}`, `${this.queues}:${queueName}`)
+            .del(`${this.processes}:${processId}`)
+            .sRem(`${this.workingProcesses}:${queueName}`, processId)
+            .exec();
+
+        if (this.debugMode) {
+            this.debugInfo.jobs = this.debugInfo.jobs || {};
+            delete this.debugInfo.jobs[processId];
+        }
+        return null;
     }
 
     /**
      * Returns a list of all processes running.
      * @returns The process IDs.
      */
-    private getProcesses(): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.pub.keys(`${this.processes}*`, (err, processIds) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(processIds.map(processId => processId.split(':')[2]));
-            });
-        });
+    private async getProcesses() {
+        return (await this.pub.keys(`${this.processes}*`)).map(processId => processId.split(':')[2])
     }
 
     /**
@@ -437,19 +320,12 @@ export class Worqr extends EventEmitter {
      * @param task The task to match.
      * @returns The process IDs.
      */
-    public getMatchingProcesses(task: string): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            const processIdsForTask: string[] = [];
-            Promise.resolve()
-                .then(() => this.getProcesses())
-                .then(processIds => Promise.all(processIds.map(processId => this.getTaskForProcess(processId).then(t => {
-                    if (t === task) {
-                        processIdsForTask.push(processId);
-                    }
-                }))))
-                .then(() => resolve(processIdsForTask))
-                .catch(err => reject(err));
-        });
+    public async getMatchingProcesses(task: string) {
+        const processIds = await this.getProcesses();
+        const processIdsForTask = (await Promise.all(
+            processIds.map(this.getTaskForProcess)
+        )).filter((t): t is string => t === task);
+        return processIdsForTask;
     }
 
     /**
@@ -457,71 +333,46 @@ export class Worqr extends EventEmitter {
      * @param queueName The name of the queue.
      * @returns The process IDs.
      */
-    private getWorkingProcesses(queueName: string): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.pub.smembers(`${this.workingProcesses}:${queueName}`, (err, processIds) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(processIds);
-            });
-        });
+    private async getWorkingProcesses(queueName: string) {
+        return this.pub.sMembers(`${this.workingProcesses}:${queueName}`);
     }
 
     /**
      * Stops a process, returning its task to the queue it came from.
      * @param processId The process ID.
      */
-    public stopProcess(processId: string): Promise<void> {
+    public async stopProcess(processId: string) {
         log(`stopping process ${processId}`);
-        return new Promise((resolve, reject) => {
-            const queueName = processId.substr(0, processId.lastIndexOf('_'));
-            this.pub.multi()
-                .rpoplpush(`${this.processes}:${processId}`, `${this.queues}:${queueName}`)
-                .srem(`${this.workingProcesses}:${queueName}`, processId)
-                .exec(err => {
-                    if (err) {
-                        return reject(err);
-                    }
-                    resolve();
-                });
-        });
+        const queueName = processId.substring(0, processId.lastIndexOf('_'));
+        await this.pub.multi()
+            .rPopLPush(`${this.processes}:${processId}`, `${this.queues}:${queueName}`)
+            .sRem(`${this.workingProcesses}:${queueName}`, processId)
+            .exec();
     }
 
     /**
      * Stops a process, removing the task entirely.
      * @param processId The process ID.
      */
-    public finishProcess(processId: string, result?: any): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    public async finishProcess(processId: string, result?: any) {
         log(`finishing process ${processId}`);
-        return new Promise((resolve, reject) => {
-            const queueName = processId.substr(0, processId.lastIndexOf('_'));
-            this.pub.lrange(`${this.processes}:${processId}`, 0, -1, (err, [task]) => {
-                if (err) {
-                    return reject(err);
-                }
-                const taskHash = crypto.createHash('md5').update(task || '').digest('hex').toString();
-                this.pub.multi()
-                    .del(`${this.uniqueTasks}:${taskHash}`)
-                    .del(`${this.processes}:${processId}`)
-                    .srem(`${this.workingProcesses}:${queueName}`, processId)
-                    .exec(err => {
-                        if (err) {
-                            return reject(err);
-                        }
-                        const message: any = { workerId: this.workerId, task };
-                        if (result) {
-                            message.result = result;
-                        }
-                        this.pub.publish(`${this.redisKeyPrefix}_${queueName}_done`, JSON.stringify(message));
-                        if (this.debugMode) {
-                            this.debugInfo.jobs = this.debugInfo.jobs || {};
-                            delete this.debugInfo.jobs[processId];
-                        }
-                        resolve();
-                    });
-            });
-        });
+        const queueName = processId.substring(0, processId.lastIndexOf('_'));
+        const [task] = await this.pub.lRange(`${this.processes}:${processId}`, 0, -1);
+        const taskHash = crypto.createHash('md5').update(task || '').digest('hex').toString();
+
+        await this.pub.multi()
+            .del(`${this.uniqueTasks}:${taskHash}`)
+            .del(`${this.processes}:${processId}`)
+            .sRem(`${this.workingProcesses}:${queueName}`, processId)
+            .exec();
+
+        const message = { workerId: this.workerId, task, result };
+        await this.pub.publish(`${this.redisKeyPrefix}_${queueName}_done`, JSON.stringify(message));
+        if (this.debugMode) {
+            this.debugInfo.jobs = this.debugInfo.jobs || {};
+            delete this.debugInfo.jobs[processId];
+        }
     }
 
     // #endregion
@@ -539,28 +390,26 @@ export class Worqr extends EventEmitter {
     /**
      * Starts this worker.
      */
-    public startWorker(): Promise<void> {
+    public async startWorker(): Promise<void> {
         log(`starting worker ${this.workerId}`);
-        return new Promise((resolve, reject) => {
-            let multi = this.pub.multi()
-                .sadd(this.workers, this.workerId);
-            if (this.workerTimeout < 0) {
-                multi = multi.sadd(this.permanentWorkers, this.workerId);
-            } else {
-                multi = multi
-                    .sadd(this.expiringWorkers, this.workerId)
-                    .set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout);
-            }
-            multi.exec(err => {
-                if (err) {
-                    return reject(err);
-                }
-                this.workerTimerIntervalId = setInterval(() => {
-                    this.keepWorkerAlive();
-                }, this.workerHeartbeatInterval);
-                resolve();
-            });
-        });
+
+        let multi = this.pub.multi()
+            .sAdd(this.workers, this.workerId);
+        if (this.workerTimeout < 0) {
+            multi = multi.sAdd(this.permanentWorkers, this.workerId);
+        } else {
+            multi = multi
+                .sAdd(this.expiringWorkers, this.workerId)
+                .set(`${this.workerTimers}:${this.workerId}`, WORKER_RUN_KEY, {
+                    'EX': this.workerTimeout
+                });
+        }
+
+        await multi.exec();
+
+        this.workerTimerIntervalId = setInterval(() => {
+            this.keepWorkerAlive();
+        }, this.workerHeartbeatInterval);
     }
 
     /**
@@ -571,27 +420,21 @@ export class Worqr extends EventEmitter {
      * This also emits an event immediately if there are tasks on the queue.
      * @param queueName The name of the queue.
      */
-    public startWork(queueName: string): Promise<void> {
+    public async startWork(queueName: string): Promise<void> {
         log(`${this.workerId} starting work on ${queueName}`);
-        return new Promise((resolve, reject) => {
-            this.isStarted(this.workerId)
-                .then(isStarted => {
-                    if (!isStarted) {
-                        return reject(`${this.workerId} is not started`);
-                    }
-                    this.pub.sadd(`${this.workingQueues}:${this.workerId}`, queueName, err => {
-                        if (err) {
-                            return reject(err);
-                        }
-                        this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_work`);
-                        this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_done`);
-                        this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
-                        this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
-                        this.requestWork(queueName);
-                        resolve();
-                    });
-                });
-        });
+
+        const isStarted = await this.isStarted(this.workerId);
+        if (!isStarted) {
+            throw new Error(`${this.workerId} is not started`);
+        }
+
+        await this.pub.sAdd(`${this.workingQueues}:${this.workerId}`, queueName)
+
+        await this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_work`, this.onMessage.bind(this));
+        await this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_done`, this.onMessage.bind(this));
+        await this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_cancel`, this.onMessage.bind(this));
+        await this.sub.subscribe(`${this.redisKeyPrefix}_${queueName}_delete`, this.onMessage.bind(this));
+        await this.requestWork(queueName);
     }
 
     /**
@@ -601,12 +444,11 @@ export class Worqr extends EventEmitter {
      * This is so the client doesn't have to set up their own polling of the queue.
      * @param queueName The name of the queue.
      */
-    public requestWork(queueName: string): void {
-        this.countQueue(queueName).then(count => {
-            if (count > 0) {
-                this.pub.publish(`${this.redisKeyPrefix}_${queueName}_work`, count.toString());
-            }
-        });
+    public async requestWork(queueName: string) {
+        const count = await this.countQueue(queueName);
+        if (count > 0) {
+            await this.pub.publish(`${this.redisKeyPrefix}_${queueName}_work`, count.toString());
+        }
     }
 
     /**
@@ -614,53 +456,41 @@ export class Worqr extends EventEmitter {
      * The worker will stop emitting events for the queue.
      * @param queueName The name of the queue.
      */
-    public stopWork(queueName: string): Promise<void> {
+    public async stopWork(queueName: string): Promise<void> {
         log(`${this.workerId} stopping work on ${queueName}`);
-        return new Promise((resolve, reject) => {
-            Promise.resolve()
-                .then(() => this.getWorkingProcesses(queueName))
-                .then(processIds => {
-                    let multi = this.pub.multi()
-                        .srem(`${this.workingQueues}:${this.workerId}`, queueName)
-                        .del(`${this.workingProcesses}:${queueName}`);
-                    processIds.forEach(processId => {
-                        multi = multi
-                            .rpoplpush(`${this.processes}:${processId}`, `${this.queues}:${queueName}`)
-                            .del(`${this.processes}:${processId}`);
-                    });
-                    multi.exec(err => {
-                        if (err) {
-                            return reject(err);
-                        }
-                        this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
-                        this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_done`);
-                        this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
-                        this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
-                        resolve();
-                    });
-                })
-                .catch(err => reject(err));
+        const processIds = await this.getWorkingProcesses(queueName);
+
+        const multi = this.pub.multi()
+            .sRem(`${this.workingQueues}:${this.workerId}`, queueName)
+            .del(`${this.workingProcesses}:${queueName}`);
+
+        processIds.forEach(processId => {
+            multi
+                .rPopLPush(`${this.processes}:${processId}`, `${this.queues}:${queueName}`)
+                .del(`${this.processes}:${processId}`);
         });
+
+        await multi.exec();
+
+        await this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
+        await this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_done`);
+        await this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
+        await this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
     }
 
     /**
      * Refreshes this worker's timer, indicating it is still active.
      */
-    private keepWorkerAlive(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            if (this.workerTimeout <= 0) {
-                return resolve();
-            }
-            this.pub.set(`${this.workerTimers}:${this.workerId}`, 'RUN', 'EX', this.workerTimeout, 'XX', (err, success) => {
-                if (err) {
-                    return reject(err);
-                }
-                if (!success) {
-                    return resolve(this.failWorker(this.workerId));
-                }
-                resolve();
-            });
-        });
+    private async keepWorkerAlive() {
+        if (this.workerTimeout <= 0) {
+            return;
+        }
+        const success = await this.pub.set(`${this.workerTimers}:${this.workerId}`, WORKER_RUN_KEY, { 'EX': this.workerTimeout, 'XX': true })
+        if (!success) {
+            this.failWorker(this.workerId)
+            return;
+        }
+        return;
     }
 
     // #endregion
@@ -671,15 +501,8 @@ export class Worqr extends EventEmitter {
      * Returns a list of all workers.
      * @returns The worker IDs.
      */
-    public getWorkers(): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.pub.smembers(this.workers, (err, workerIds) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(workerIds);
-            });
-        });
+    public async getWorkers() {
+        return this.pub.sMembers(this.workers);
     }
 
     /**
@@ -687,15 +510,8 @@ export class Worqr extends EventEmitter {
      * @param workerId The worker ID.
      * @returns Whether the worker is started.
      */
-    private isStarted(workerId: string): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            this.pub.sismember(this.workers, workerId, (err, isMember) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(isMember === 1);
-            });
-        });
+    private async isStarted(workerId: string) {
+        return this.pub.sIsMember(this.workers, workerId);
     }
 
     /**
@@ -704,101 +520,80 @@ export class Worqr extends EventEmitter {
      * @param queueName The name of the queue.
      * @returns Whether the worker is working on the queue.
      */
-    private isWorking(workerId: string, queueName: string): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            this.pub.sismember(`${this.workingQueues}:${workerId}`, queueName, (err, isMember) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(isMember === 1);
-            });
-        });
+    private async isWorking(workerId: string, queueName: string): Promise<boolean> {
+        return this.pub.sIsMember(`${this.workingQueues}:${workerId}`, queueName);
     }
 
     /**
      * Fails a worker, putting all its tasks back on the queues they came from.
      * @param workerId The worker ID (ID of the instance if unspecified).
      */
-    public failWorker(workerId: string = this.workerId): Promise<void> {
+    public async failWorker(workerId: string = this.workerId): Promise<void> {
         log(`failing ${workerId}`);
-        return new Promise((resolve, reject) => {
-            Promise.resolve()
-                .then(() => this.getWorkingQueues(workerId))
-                .then(queueNames => {
-                    const processIds: string[] = [];
-                    return Promise.all(queueNames.map(queueName => this.getWorkingProcesses(queueName)))
-                        .then(processIds2d => processIds2d.forEach(processIds1d => processIds.push(...processIds1d)))
-                        .then(() => Promise.resolve<WorkerItems>({ queueNames, processIds }));
-                })
-                .then(({ queueNames, processIds }) => {
-                    let multi = this.pub.multi()
-                        .srem(this.workers, workerId)
-                        .srem(this.expiringWorkers, workerId)
-                        .srem(this.permanentWorkers, workerId)
-                        .del(`${this.workerTimers}:${workerId}`)
-                        .del(`${this.workingQueues}:${workerId}`);
-                    queueNames.forEach(queueName => {
-                        multi = multi
-                            .del(`${this.workingProcesses}:${queueName}`);
-                    });
-                    processIds.forEach(processId => {
-                        const queueName = processId.substr(0, processId.lastIndexOf('_'));
-                        multi = multi
-                            .rpoplpush(`${this.processes}:${processId}`, `${this.queues}:${queueName}`)
-                            .del(`${this.processes}:${processId}`);
-                    });
-                    multi.exec(err => {
-                        if (err) {
-                            return reject(err);
-                        }
-                        if (workerId === this.workerId) {
-                            queueNames.forEach(queueName => {
-                                this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
-                                this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_done`);
-                                this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
-                                this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
-                            });
-                        }
-                        resolve();
-                    });
-                })
-                .catch(err => reject(err));
+
+        const queueNames = await this.getWorkingQueues(workerId);
+
+        const processIds: string[] = [];
+        await Promise.all(queueNames.map(queueName => this.getWorkingProcesses(queueName)))
+            .then(processIds2d => processIds2d.forEach(processIds1d => processIds.push(...processIds1d)));
+
+        const multi = this.pub.multi()
+            .sRem(this.workers, workerId)
+            .sRem(this.expiringWorkers, workerId)
+            .sRem(this.permanentWorkers, workerId)
+            .del(`${this.workerTimers}:${workerId}`)
+            .del(`${this.workingQueues}:${workerId}`);
+
+        queueNames.forEach(queueName => {
+            multi.del(`${this.workingProcesses}:${queueName}`);
         });
+
+        processIds.forEach(processId => {
+            const queueName = processId.substr(0, processId.lastIndexOf('_'));
+            multi
+                .rPopLPush(`${this.processes}:${processId}`, `${this.queues}:${queueName}`)
+                .del(`${this.processes}:${processId}`);
+        });
+
+        await multi.exec();
+
+        if (workerId === this.workerId) {
+            await Promise.all(queueNames.map(async queueName => {
+                await this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_work`);
+                await this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_done`);
+                await this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_cancel`);
+                await this.sub.unsubscribe(`${this.redisKeyPrefix}_${queueName}_delete`);
+            }));
+        }
     }
 
     /**
      * Returns a list of all expiring workers.
      * @returns The worker IDs.
      */
-    private getExpiringWorkers(): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.pub.smembers(this.expiringWorkers, (err, workerIds) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(workerIds);
-            });
-        });
+    private async getExpiringWorkers() {
+        return this.pub.sMembers(this.expiringWorkers);
     }
 
     /**
      * Fails all workers that have timed out.
      * This is run every `workerCleanupInterval` milliseconds.
      */
-    public cleanupWorkers(): Promise<void> {
-        return this.getExpiringWorkers()
-            .then(workerIds => Promise.all(workerIds.map(workerId => new Promise<WorkerStatus>((resolve, reject) => {
-                this.pub.keys(`${this.workerTimers}:${workerId}`, (err, workerTimers) => {
-                    if (err) {
-                        return reject(err);
-                    }
-                    resolve({ workerId, dead: workerTimers.length === 0 });
-                });
-            }))))
-            .then(results => Promise.all(results
+    public async cleanupWorkers(): Promise<void> {
+        const workerIds = await this.getExpiringWorkers();
+
+        const results = await Promise.all(
+            workerIds.map(async workerId => {
+                const workerTimers = await this.pub.keys(`${this.workerTimers}:${workerId}`);
+                return { workerId, dead: workerTimers.length === 0 };
+            })
+        );
+
+        await Promise.all(
+            results
                 .filter(({ workerId, dead }) => workerId !== this.workerId && dead)
-                .map(({ workerId }) => this.failWorker(workerId))))
-            .then(() => Promise.resolve());
+                .map(({ workerId }) => this.failWorker(workerId))
+        );
     }
 
     // #endregion

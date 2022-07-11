@@ -1,4 +1,9 @@
-import { RedisClient } from 'redis';
+import * as redis from 'redis';
+
+export interface Options {
+    redis?: RedisOptions,
+    worqr?: WorqrOptions
+}
 
 /**
  * Options for Redis connection.
@@ -7,15 +12,11 @@ import { RedisClient } from 'redis';
  */
 export interface RedisOptions {
     /** An existing publish connection. */
-    data?: RedisClient;
+    data?: redis.RedisClientType;
     /** An existing subscribe connection. */
-    subscribe?: RedisClient;
-    /** The host name. */
-    host?: string;
-    /** The port. */
-    port?: number;
-    /** The server password. */
-    password?: string;
+    subscribe?: redis.RedisClientType;
+    /** Redis client options, if not using existing clients */
+    redisClientOptions?: redis.RedisClientOptions;
 }
 
 /**

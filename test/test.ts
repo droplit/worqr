@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { expect } from 'chai';
 import { Worqr } from '../src';
 
@@ -5,13 +6,21 @@ let worqr: Worqr;
 let processId: string;
 
 describe('Worqr', function () {
-    it('should create a new Worqr instance', () => {
-        worqr = new Worqr({
-            host: process.env.REDIS_HOST as string,
-            port: Number.parseInt(process.env.REDIS_PORT as string),
-            password: process.env.REDIS_PASSWORD as string
-        }, { redisKeyPrefix: 'worqr.test' });
+    it('should create a new Worqr instance', async () => {
+        const options = {
+            redis: {
+                redisClientOptions: {
+                    url: process.env.REDIS_URL,
+                    password: process.env.REDIS_PASSWORD
+                }
+            },
+            worqr: {
+                redisKeyPrefix: 'worqr.test'
+            }
+        }
+        worqr = new Worqr(options);
         expect(worqr).to.exist;
+        await worqr.init();
     });
 
     it('should clean up any existing workers', done => {
@@ -126,12 +135,12 @@ describe('Worqr', function () {
 
     it('should dequeue a task on the first queue', done => {
         worqr.dequeue('queue1')
-            .then(process => {
-                expect(process).to.exist;
-                expect(process!.id).to.exist;
-                expect(process!.task).to.exist;
-                expect(process!.task).to.equal('task1');
-                processId = process!.id;
+            .then(p => {
+                expect(p).to.exist;
+                expect(p!.id).to.exist;
+                expect(p!.task).to.exist;
+                expect(p!.task).to.equal('task1');
+                processId = p!.id;
                 done();
             })
             .catch(done);
@@ -145,12 +154,12 @@ describe('Worqr', function () {
 
     it('should start another task', done => {
         worqr.dequeue('queue1')
-            .then(process => {
-                expect(process).to.exist;
-                expect(process!.id).to.exist;
-                expect(process!.task).to.exist;
-                expect(process!.task).to.equal('task2');
-                processId = process!.id;
+            .then(p => {
+                expect(p).to.exist;
+                expect(p!.id).to.exist;
+                expect(p!.task).to.exist;
+                expect(p!.task).to.equal('task2');
+                processId = p!.id;
                 done();
             })
             .catch(done);
@@ -187,19 +196,19 @@ describe('Worqr', function () {
     it('should finish three tasks on the first queue', done => {
         Promise.resolve()
             .then(() => worqr.dequeue('queue1'))
-            .then(process => {
-                expect(process).to.exist;
-                return worqr.finishProcess(process!.id);
+            .then(p => {
+                expect(p).to.exist;
+                return worqr.finishProcess(p!.id);
             })
             .then(() => worqr.dequeue('queue1'))
-            .then(process => {
-                expect(process).to.exist;
-                return worqr.finishProcess(process!.id);
+            .then(p => {
+                expect(p).to.exist;
+                return worqr.finishProcess(p!.id);
             })
             .then(() => worqr.dequeue('queue1'))
-            .then(process => {
-                expect(process).to.exist;
-                return worqr.finishProcess(process!.id);
+            .then(p => {
+                expect(p).to.exist;
+                return worqr.finishProcess(p!.id);
             })
             .then(() => done())
             .catch(done);
@@ -292,12 +301,12 @@ describe('Worqr', function () {
 
     it('should dequeue the unique task', done => {
         worqr.dequeue('queue1')
-            .then(process => {
-                expect(process).to.exist;
-                expect(process!.id).to.exist;
-                expect(process!.task).to.exist;
-                expect(process!.task).to.equal('uniqueTask1');
-                processId = process!.id;
+            .then(p => {
+                expect(p).to.exist;
+                expect(p!.id).to.exist;
+                expect(p!.task).to.exist;
+                expect(p!.task).to.equal('uniqueTask1');
+                processId = p!.id;
                 done();
             })
             .catch(done);
@@ -333,14 +342,14 @@ describe('Worqr', function () {
     it('should dequeue and complete both tasks', done => {
         Promise.resolve()
             .then(() => worqr.dequeue('queue1'))
-            .then(process => {
-                expect(process).to.exist;
-                return worqr.finishProcess(process!.id);
+            .then(p => {
+                expect(p).to.exist;
+                return worqr.finishProcess(p!.id);
             })
             .then(() => worqr.dequeue('queue1'))
-            .then(process => {
-                expect(process).to.exist;
-                return worqr.finishProcess(process!.id);
+            .then(p => {
+                expect(p).to.exist;
+                return worqr.finishProcess(p!.id);
             })
             .then(() => done())
             .catch(done);

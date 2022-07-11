@@ -59,14 +59,26 @@ Worqr can handle one-time tasks as well as persistent tasks. A persistent task i
 ### Initializing Worqr
 
 ```typescript
-let worqr = new Worqr({ host: <domain/ip>, port: <port #>, password: <pwd>}, {redisKeyPrefix: <unique namespace> });
+const options = {
+    redis: { redisClientOptions: { url: <url>, password: <pwd> } },
+    worqr: { redisKeyPrefix: <unique namespace> }
+}
+const worqr = new Worqr(options);
+await worqr.init();
 ```
 > NOTE: Worqr will open two connections to Redis. One for data and one for subscriptions.
+
+> For `redisClientOptions` see: https://github.com/redis/node-redis/blob/master/docs/client-configuration.md
 
 You can also supply an existing data and/or subscription connection to prevent Worqr from opening it's own.
 
 ```typescript
-let worqr = new Worqr({ data: <RedisClient instance>, subscribe: <RedisClient instance> });
+const options = {
+    redis: { data: <RedisClient instance>, subscribe: <RedisClient instance> },
+    worqr: ...
+}
+const worqr = new Worqr(options);
+await worqr.init();
 ```
 > NOTE: These must be separate Redis connections if supplying both.
 
@@ -88,12 +100,6 @@ worqr.cancelTasks('<queue name>', '<task>');
 If this is a worker process (a process that will perform work), you must start the worker before you can accept work from a queue. Do not do this in a process that only queues tasks.
 
 ```typescript
-worqr.startWorker();
-```
-
-`startWorker` method returns a promise, so it also supports `await`:
-
-```typescript
 await worqr.startWorker();
 ```
 > NOTE: Once a worker has started, it will periodically refresh a redis key. Make sure your [event loop](https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/) doesn't get CPU starved or your worker will be failed and its work will be recycled back into the queue. If your event loop runs too long, you can use `setImmediate()` to break your long running process into smaller sections.
@@ -112,7 +118,7 @@ worqr.on('<queue name>', (type: string, message: string) => {
             break;
         case 'cancel':
             // stop work
-            // message: task to cancel 
+            // message: task to cancel
             ...
             break;
         case 'delete':
@@ -120,7 +126,7 @@ worqr.on('<queue name>', (type: string, message: string) => {
             // message: empty string
             ...
             break;
-        }       
+        }
 });
 
 // Ask for work from the specified queue

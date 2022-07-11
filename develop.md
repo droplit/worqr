@@ -13,7 +13,7 @@ Create `.env` file and input environment variables. See `.example.env for refere
 ### Lint code
 
 ```
-npm run tslint
+yarn lint
 ```
 
 ### Run tests
